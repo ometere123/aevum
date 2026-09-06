@@ -1,0 +1,1 @@
+import {createHash} from "node:crypto"; import {readFileSync} from "node:fs"; for(const file of ["contracts/aevum_core.py","contracts/aevum_vault.py"]){console.log(`${file} ${createHash("sha256").update(readFileSync(file)).digest("hex")}`)}

@@ -1,0 +1,42 @@
+{
+  "name": "aevum",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "contract:sha": "node scripts/contract-sha.mjs",
+    "network:guard": "node scripts/network-guard.mjs",
+    "env:check": "node scripts/validate-env.mjs",
+    "contract:compile": "python scripts/compile-contracts.py",
+    "test:contract": "python -m pytest tests/direct -q",
+    "test:integration": "node scripts/live-smoke.mjs"
+  },
+  "dependencies": {
+    "framer-motion": "^12.23.12",
+    "genlayer-js": "1.1.8",
+    "lucide-react": "^0.468.0",
+    "next": "16.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "viem": "^2.21.54",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "16.0.0",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

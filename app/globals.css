@@ -1,0 +1,14 @@
+@import "tailwindcss";
+:root { --ink:#0B0B0A; --paper:#E9E1CF; --copper:#B8784E; --signal:#B8FF5A; --smoke:#777269; }
+* { box-sizing:border-box; }
+html { background:var(--ink); color:var(--paper); }
+body { margin:0; background:radial-gradient(circle at 50% -20%,#2a241d 0,#0B0B0A 48%); font-family:Manrope,system-ui,sans-serif; }
+::selection { background:var(--signal); color:var(--ink); }
+.mono { font-family:"Space Mono",monospace; }
+.serif { font-family:"Cormorant Garamond",Georgia,serif; }
+.grid-paper { background-image:linear-gradient(#e9e1cf10 1px,transparent 1px),linear-gradient(90deg,#e9e1cf10 1px,transparent 1px); background-size:32px 32px; }
+.orbit { animation:spin 38s linear infinite; transform-origin:center; }
+.orbit-slow { animation:spin 70s linear infinite reverse; transform-origin:center; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@keyframes reveal { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:none; } }
+.reveal { animation:reveal .7s ease-out both; }

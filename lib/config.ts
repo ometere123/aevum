@@ -1,0 +1,4 @@
+import { z } from "zod";
+export const env = { coreAddress: process.env.NEXT_PUBLIC_CORE_ADDRESS ?? "", vaultAddress: process.env.NEXT_PUBLIC_VAULT_ADDRESS ?? "", network: process.env.NEXT_PUBLIC_GENLAYER_NETWORK ?? "studionet", chainId: Number(process.env.NEXT_PUBLIC_GENLAYER_CHAIN_ID ?? 61999), rpc: process.env.NEXT_PUBLIC_GENLAYER_RPC ?? "https://studio.genlayer.com/api", explorer: process.env.NEXT_PUBLIC_GENLAYER_EXPLORER ?? "https://explorer-studio.genlayer.com", demoTiming: process.env.NEXT_PUBLIC_DEMO_TIMING === "true" };
+export const envSchema = z.object({chainId:z.literal(61999),network:z.literal("studionet"),rpc:z.literal("https://studio.genlayer.com/api")});
+export function assertStudionet(){ const parsed=envSchema.safeParse(env); if(!parsed.success) throw new Error("Aevum requires Studionet 61999 and the stable RPC."); }
