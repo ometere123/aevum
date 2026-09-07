@@ -24,7 +24,7 @@ export function classifyWalletError(error:unknown):TxState{
   const code=(error as {code?:number})?.code;
   const message=error instanceof Error?error.message:String(error??"");
   if(code===4001||/user rejected|user denied/i.test(message)) return {stage:"USER_REJECTED",error:message||"Wallet signature rejected"};
-  if(/wrong_network|chain|network/i.test(message)) return {stage:"WRONG_NETWORK",error:message};
+  if(/wrong_network|wrong network|switch wallet|chain mismatch/i.test(message)) return {stage:"WRONG_NETWORK",error:message};
   return {stage:"CONTRACT_ERROR",error:message||"Contract write failed"};
 }
 
@@ -54,7 +54,8 @@ export async function confirmWrite(
   try{
     await reread();
   }catch(error){
-    return {stage:"READBACK_ERROR",hash,error:error instanceof Error?error.message:"Canonical state reread failed"};
+    const message=error instanceof Error?error.message:"Canonical state reread failed";
+    return {stage:/^STATE_MISMATCH:/i.test(message)?"STATE_MISMATCH":"READBACK_ERROR",hash,error:message};
   }
   return {stage:"EXECUTION_CONFIRMED",hash};
 }
