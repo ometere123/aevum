@@ -278,9 +278,32 @@ class AevumCore(gl.Contract):
         fetched = self._fetch_sources(sources)
         if not all(item["available"] for item in fetched):
             return self._insufficient_result(sources, fetched, "one or more registered sources were unavailable")
+        if not candidates:
+            return self._deterministic_result(org, sources, fetched)
         prompt = self._prompt(org, sources, fetched, candidates)
         raw = gl.nondet.exec_prompt(prompt, response_format="json")
         return self._parse_result(raw, sources, fetched, candidates)
+
+    def _deterministic_result(self, org, sources, fetched):
+        recent_markers = ["aevum", "continuity", "mission", "genlayer", "activity", "repository"]
+        breach_markers = ["breach", "abandoned", "terminated", "violation"]
+        supports = []
+        for item in fetched:
+            text = item["text"].lower()
+            recent = any(marker in text for marker in recent_markers)
+            breach = any(marker in text for marker in breach_markers)
+            supports.append({"source_id": item["source_id"], "available": True, "supports_recent_activity": recent, "supports_mission_alignment": recent and not breach, "excerpt": item["text"][:MAX_EXCERPT]})
+        active_support = sum(1 for item in supports if item["supports_recent_activity"] and item["supports_mission_alignment"])
+        if active_support >= MIN_SOURCES:
+            outcome = "ACTIVE"
+            reason = "two independent registered sources contain bounded continuity activity markers"
+        elif any(any(marker in item["text"].lower() for marker in breach_markers) for item in fetched):
+            outcome = "MISSION_BREACH"
+            reason = "registered sources contain bounded mission-breach markers"
+        else:
+            outcome = "DORMANT"
+            reason = "registered sources contain no bounded recent-activity markers"
+        return {"activity_outcome": outcome, "successor_outcome": "NOT_APPLICABLE", "selected_candidate_id": -1, "selected_candidate_address": "", "source_support": supports, "reason": reason}
 
     def _insufficient_result(self, sources, fetched, reason):
         fetched_by_id = {int(item["source_id"]): item for item in fetched}

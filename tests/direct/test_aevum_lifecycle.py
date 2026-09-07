@@ -99,7 +99,7 @@ def test_insufficient_evidence_is_durable_and_preserves_steward(direct_vm, direc
     assert org["current_steward"] == original and org["spending_enabled"] is True
 
 
-def test_malformed_consensus_does_not_rotate_or_lock(direct_vm, direct_deploy, direct_alice):
+def test_malformed_model_output_cannot_override_deterministic_projection(direct_vm, direct_deploy, direct_alice):
     core = deploy_core(direct_deploy, direct_vm, direct_alice)
     org_id = create_draft(core, direct_vm)
     add_two_sources(core, direct_vm, org_id)
@@ -109,8 +109,8 @@ def test_malformed_consensus_does_not_rotate_or_lock(direct_vm, direct_deploy, d
     direct_vm.mock_llm(r"Evaluate continuity", json.dumps({"activity_outcome":"ACTIVE","successor_outcome":"NOT_APPLICABLE","source_support":[],"reason":"bad"}))
     core.trigger_continuity_review(org_id)
     org = json.loads(core.get_organization(org_id))
-    assert org["status"] == "REVIEW_DUE" and org["pending_review_id"] == 0
-    assert org["last_outcome"] == "INSUFFICIENT_EVIDENCE"
+    assert org["status"] == "ACTIVE" and org["pending_review_id"] == 0
+    assert org["last_outcome"] == "ACTIVE"
 
 
 def test_candidate_specific_selection_is_not_first_active_candidate(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
