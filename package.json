@@ -18,6 +18,7 @@
     "test:integration": "node scripts/live-smoke.mjs"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
     "framer-motion": "^12.23.12",
     "genlayer-js": "1.1.8",
     "lucide-react": "^0.468.0",
