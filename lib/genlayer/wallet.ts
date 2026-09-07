@@ -1,7 +1,6 @@
 "use client";
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
-import type { EIP1193Provider } from "viem";
 import { useCallback, useEffect, useState } from "react";
 import { env } from "../config";
 type Ethereum = { request:(args:{method:string;params?:unknown[]})=>Promise<unknown>; on?:(event:string,cb:()=>void)=>void; removeListener?:(event:string,cb:()=>void)=>void };
@@ -12,7 +11,6 @@ export function useWallet(){
  useEffect(()=>{sync();const e=window.ethereum;if(!e?.on)return;e.on("accountsChanged",sync);e.on("chainChanged",sync);return()=>{e.removeListener?.("accountsChanged",sync);e.removeListener?.("chainChanged",sync)}},[sync]);
  const connect=async()=>{try{setError(undefined);if(!window.ethereum)throw new Error("No browser wallet provider found.");await window.ethereum.request({method:"eth_requestAccounts"});await sync()}catch(e){setError(e instanceof Error?e.message:"Wallet connection failed")}};
  const switchNetwork=async()=>{try{await window.ethereum?.request({method:"wallet_switchEthereumChain",params:[{chainId:"0xF22F"}]});await sync()}catch(e){if((e as {code?:number}).code===4902){try{await window.ethereum?.request({method:"wallet_addEthereumChain",params:[{chainId:"0xF22F",chainName:"GenLayer Studionet",nativeCurrency:{name:"GEN",symbol:"GEN",decimals:18},rpcUrls:[env.rpc],blockExplorerUrls:[env.explorer]}]});await sync();return}catch(addError){setError(addError instanceof Error?addError.message:"Network add failed");return}}setError(e instanceof Error?e.message:"Network switch failed")}};
- const provider=window.ethereum as unknown as EIP1193Provider|undefined;
- const writeClient=address&&provider?createClient({chain:studionet,account:address as `0x${string}`,provider}):undefined;
+ const writeClient=address&&window.ethereum?createClient({chain:studionet,account:address as `0x${string}`,provider:window.ethereum as never}):undefined;
  return {address,chainOk,error,connect,disconnect:()=>{setAddress(undefined);setChainOk(false)},switchNetwork,readClient:createClient({chain:studionet}),writeClient};
 }
