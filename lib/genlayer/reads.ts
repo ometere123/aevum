@@ -15,8 +15,16 @@ export async function readOrganizations(){
   const count=Number(await read(core(),"get_organization_count"));
   return Promise.all(Array.from({length:count},(_,i)=>readOrganization(String(i+1))));
 }
-export async function readSources(id:string, count:number){return Promise.all(Array.from({length:count},(_,i)=>read(core(),"get_source",[BigInt(id),BigInt(i+1)]).then(json)));}
+export async function readSources(id:string,count:number){
+  return Promise.all(Array.from({length:count},(_,i)=>read(core(),"get_source_by_index",[BigInt(id),BigInt(i)]).then(json)));
+}
 export async function readReview(id:string){return json(await read(core(),"get_review",[BigInt(id)]));}
-export async function readCandidates(id:string, count:number){return Promise.all(Array.from({length:count},(_,i)=>read(core(),"get_candidate",[BigInt(id),BigInt(i+1)]).then(json)));}
+export async function readCandidates(id:string,count:number){
+  return Promise.all(Array.from({length:count},(_,i)=>read(core(),"get_candidate_by_index",[BigInt(id),BigInt(i)]).then(json)));
+}
 export async function readVault(id:string){return json(await read(vault(),"get_vault",[BigInt(id)]));}
-export async function readAllowance(id:string){return Number(await read(vault(),"remaining_epoch_allowance",[BigInt(id)]));}
+export async function readAllowance(id:string){return BigInt(String(await read(vault(),"remaining_epoch_allowance",[BigInt(id)])));}
+export async function readSpendingEnabled(id:string){return Boolean(await read(core(),"is_spending_enabled",[BigInt(id)]));}
+export async function readVaultBinding(){return String(await read(core(),"get_vault_address"));}
+export async function readVaultCore(){return String(await read(vault(),"get_core_address"));}
+export async function readReleaseUsed(id:string,memoHash:`0x${string}`){return Boolean(await read(vault(),"was_release_used",[BigInt(id),memoHash]));}
