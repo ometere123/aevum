@@ -10,8 +10,10 @@ export async function confirmWrite(client: ReturnType<typeof createClient>, hash
     const item=receipt as {statusName?:string;txExecutionResultName?:string;resultName?:string;status?:string};
     const resultName=String(item.txExecutionResultName ?? item.resultName ?? "").toUpperCase();
     const statusName=String(item.statusName ?? item.status ?? "").toUpperCase();
-    if (!statusName.includes("FINAL")) return {stage:"CONSENSUS_FAILURE",hash,error:`Transaction did not finalize: ${statusName || "unknown status"}`};
-    if (resultName && !resultName.includes("SUCCESS") && !resultName.includes("ACCEPT") && !resultName.includes("OK")) return {stage:"EXECUTION_ERROR",hash,error:resultName};
+    const successful = (client as unknown as {isSuccessful?: (receipt: unknown)=>boolean}).isSuccessful;
+    if (successful && !successful(receipt)) return {stage:"EXECUTION_ERROR",hash,error:"Authoritative SDK success check failed"};
+    if (statusName !== "FINALIZED") return {stage:"CONSENSUS_FAILURE",hash,error:`Transaction did not finalize: ${statusName || "unknown status"}`};
+    if (!successful && resultName !== "SUCCESS") return {stage:"EXECUTION_ERROR",hash,error:resultName || "unknown execution result"};
     await reread();
     return {stage:"EXECUTION_CONFIRMED",hash};
   } catch (error) { return {stage:"RPC_UNAVAILABLE",hash,error:error instanceof Error?error.message:"Unable to confirm transaction"}; }
