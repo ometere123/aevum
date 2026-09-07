@@ -11,8 +11,9 @@ async function read(address:`0x${string}`,functionName:string,args:unknown[]=[])
 }
 const json=(value:unknown)=>JSON.parse(String(value));
 export async function readOrganization(id:string){return json(await read(core(),"get_organization",[BigInt(id)]));}
+export async function readOrganizationCount(){return Number(await read(core(),"get_organization_count"));}
 export async function readOrganizations(){
-  const count=Number(await read(core(),"get_organization_count"));
+  const count=await readOrganizationCount();
   return Promise.all(Array.from({length:count},(_,i)=>readOrganization(String(i+1))));
 }
 export async function readSources(id:string,count:number){
