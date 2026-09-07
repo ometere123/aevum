@@ -1,7 +1,7 @@
 {
   "deploymentStatus": "aligned-contract-pair-live-read-no-funded-lifecycle",
-  "note": "Core and Vault below are a fresh matching pair from the reviewed source. Canonical reads and schemas are verified; no organization or funded native transfer has yet been executed on this pair.",
-  "commit": "3a1c3b9",
+  "note": "Core and Vault below are a fresh matching pair from the reviewed source. Canonical reads, schemas, setup, and an insufficient-evidence review are verified. No funded native transfer or browser-wallet lifecycle is claimed.",
+  "commit": "d6399d1",
   "network": {
     "name": "studionet",
     "chainId": 61999,
@@ -28,6 +28,19 @@
       "finality": "FINALIZED",
       "execution": "SUCCESS"
     }
+  },
+  "liveEvidence": {
+    "organizationId": 1,
+    "createOrganizationTx": "0x28f30d9a1607b7790403e7b623b791cf5bca1affb98baabeaacc5c3086783666",
+    "secondSourceTx": "0x16058af7161e6475d9d28eea29a6da270420f74d4fe292f2ffd4d445645735c9",
+    "sealTx": "0x759cfab8eca1b4e61e989ca29929b9fb90c2ef5399f94c58e9ff275bc76fb810",
+    "reviewTx": "0x2e96af592bbc878dfed1e655c8227ff00b18e15f12cc7de75c45a8e31c7430d0",
+    "reviewFinality": "FINALIZED",
+    "reviewExecution": "SUCCESS",
+    "canonicalOutcome": "INSUFFICIENT_EVIDENCE",
+    "canonicalStatus": "REVIEW_DUE",
+    "canonicalSteward": "0xb29Ead15B1E8a2420faE84de974088f67a15ccC2",
+    "vaultRead": {"funded": 0, "released": 0, "balance": 0}
   },
   "explorerLinks": {
     "coreDeployment": "https://explorer-studio.genlayer.com/tx/0xc9a2f016e44babe30923c28884d7d528a86df55cbd979b7677eee5fd938ce82e",
