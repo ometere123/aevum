@@ -25,6 +25,10 @@ export async function readCandidates(id:string,count:number){
 export async function readVault(id:string){return json(await read(vault(),"get_vault",[BigInt(id)]));}
 export async function readAllowance(id:string){return BigInt(String(await read(vault(),"remaining_epoch_allowance",[BigInt(id)])));}
 export async function readSpendingEnabled(id:string){return Boolean(await read(core(),"is_spending_enabled",[BigInt(id)]));}
+export async function readReviewDue(id:string){return Boolean(await read(core(),"is_review_due",[BigInt(id)]));}
+export async function readCanRecoverTreasury(id:string){return Boolean(await read(core(),"can_recover_treasury",[BigInt(id)]));}
+export async function readRecoveryPolicy(id:string){return json(await read(core(),"get_recovery_policy",[BigInt(id)]));}
 export async function readVaultBinding(){return String(await read(core(),"get_vault_address"));}
 export async function readVaultCore(){return String(await read(vault(),"get_core_address"));}
 export async function readReleaseUsed(id:string,memoHash:`0x${string}`){return Boolean(await read(vault(),"was_release_used",[BigInt(id),memoHash]));}
+export async function readBindings(){const [coreVault,vaultCore]=await Promise.all([readVaultBinding(),readVaultCore()]);return {coreVault:coreVault.toLowerCase(),vaultCore:vaultCore.toLowerCase()};}
