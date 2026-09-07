@@ -1,7 +1,7 @@
 {
   "deploymentStatus": "source-and-core-ahead-of-complete-live-lifecycle",
   "note": "The previous matching Core/Vault deployment was live-read successfully, but the final payload-persistence fix was deployed as a fresh Core after that readback. A matching fresh Vault and complete post-fix lifecycle proof remain outstanding.",
-  "commit": "5996387c3dd1fb49a566f3a7f4f3498d66e3bcce",
+  "commit": "c21b2f0",
   "network": {
     "name": "studionet",
     "chainId": 61999,
