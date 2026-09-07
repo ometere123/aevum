@@ -1,7 +1,7 @@
 {
   "deploymentStatus": "aligned-contract-pair-live-read-no-funded-lifecycle",
   "note": "Core and Vault below are a fresh matching pair from the reviewed source. Canonical reads and schemas are verified; no organization or funded native transfer has yet been executed on this pair.",
-  "commit": "pending-commit-after-frontend-fixes",
+  "commit": "3a1c3b9",
   "network": {
     "name": "studionet",
     "chainId": 61999,
