@@ -276,9 +276,31 @@ class AevumCore(gl.Contract):
 
     def _derive_review(self, org, sources, candidates):
         fetched = self._fetch_sources(sources)
+        if not all(item["available"] for item in fetched):
+            return self._insufficient_result(sources, fetched, "one or more registered sources were unavailable")
         prompt = self._prompt(org, sources, fetched, candidates)
         raw = gl.nondet.exec_prompt(prompt, response_format="json")
         return self._parse_result(raw, sources, fetched, candidates)
+
+    def _insufficient_result(self, sources, fetched, reason):
+        fetched_by_id = {int(item["source_id"]): item for item in fetched}
+        return {
+            "activity_outcome": "INSUFFICIENT_EVIDENCE",
+            "successor_outcome": "INSUFFICIENT_EVIDENCE",
+            "selected_candidate_id": -1,
+            "selected_candidate_address": "",
+            "source_support": [
+                {
+                    "source_id": int(source["source_id"]),
+                    "available": bool(fetched_by_id[int(source["source_id"])] ["available"]),
+                    "supports_recent_activity": False,
+                    "supports_mission_alignment": False,
+                    "excerpt": "",
+                }
+                for source in sources
+            ],
+            "reason": reason[:MAX_REASON],
+        }
 
     def _same_consequence(self, leader, validator):
         if leader is None or validator is None:
