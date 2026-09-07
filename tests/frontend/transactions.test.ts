@@ -26,9 +26,13 @@ describe("finalized write confirmation",()=>{
     const failing={waitForFinalization:vi.fn().mockRejectedValue(new Error("finality timeout"))} as never;
     const result=await confirmWrite(failing,hash,async()=>{});expect(result.stage).toBe("FINALITY_TIMEOUT");expect(result.hash).toBe(hash);
   });
-  it("reports canonical reread failure instead of success",async()=>{
+  it("reports canonical reread transport failure instead of success",async()=>{
     const result=await confirmWrite(client({statusName:"FINALIZED",txExecutionResultName:"SUCCESS"}),hash,async()=>{throw new Error("readback unavailable")});
     expect(result.stage).toBe("READBACK_ERROR");expect(result.hash).toBe(hash);
+  });
+  it("preserves canonical state mismatches as their own failure class",async()=>{
+    const result=await confirmWrite(client({statusName:"FINALIZED",txExecutionResultName:"SUCCESS"}),hash,async()=>{throw new Error("STATE_MISMATCH: balance changed by the wrong amount")});
+    expect(result.stage).toBe("STATE_MISMATCH");expect(result.hash).toBe(hash);
   });
 });
 
