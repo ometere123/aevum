@@ -5,10 +5,13 @@ export type TxState={stage:TxStage; hash?:string; error?:string};
 export const explorerTx=(hash:string)=>`${env.explorer}/tx/${hash}`;
 export async function confirmWrite(client: ReturnType<typeof createClient>, hash: `0x${string}`, reread: ()=>Promise<void>): Promise<TxState>{
   try {
-    const receipt = await client.waitForTransactionReceipt({hash});
-    const resultName = String((receipt as {resultName?: string}).resultName ?? "").toUpperCase();
-    const statusName = String((receipt as {statusName?: string}).statusName ?? "").toUpperCase();
-    if (resultName.includes("FAIL") || resultName.includes("ERROR") || statusName.includes("FAIL")) return {stage:"EXECUTION_ERROR",hash,error:resultName || statusName};
+    const finalizer = (client as unknown as {waitForFinalization?: (args:{hash:`0x${string}`})=>Promise<unknown>}).waitForFinalization;
+    const receipt = finalizer ? await finalizer({hash}) : await client.waitForTransactionReceipt({hash, waitUntil:"finalized"} as never);
+    const item=receipt as {statusName?:string;txExecutionResultName?:string;resultName?:string;status?:string};
+    const resultName=String(item.txExecutionResultName ?? item.resultName ?? "").toUpperCase();
+    const statusName=String(item.statusName ?? item.status ?? "").toUpperCase();
+    if (!statusName.includes("FINAL")) return {stage:"CONSENSUS_FAILURE",hash,error:`Transaction did not finalize: ${statusName || "unknown status"}`};
+    if (resultName && !resultName.includes("SUCCESS") && !resultName.includes("ACCEPT") && !resultName.includes("OK")) return {stage:"EXECUTION_ERROR",hash,error:resultName};
     await reread();
     return {stage:"EXECUTION_CONFIRMED",hash};
   } catch (error) { return {stage:"RPC_UNAVAILABLE",hash,error:error instanceof Error?error.message:"Unable to confirm transaction"}; }
