@@ -1,0 +1,59 @@
+{
+  "deploymentStatus": "source-and-core-ahead-of-complete-live-lifecycle",
+  "note": "The previous matching Core/Vault deployment was live-read successfully, but the final payload-persistence fix was deployed as a fresh Core after that readback. A matching fresh Vault and complete post-fix lifecycle proof remain outstanding.",
+  "commit": "5996387c3dd1fb49a566f3a7f4f3498d66e3bcce",
+  "network": {
+    "name": "studionet",
+    "chainId": 61999,
+    "rpc": "https://studio.genlayer.com/api",
+    "explorer": "https://explorer-studio.genlayer.com"
+  },
+  "contracts": {
+    "core": {
+      "address": "0x328Cf94F3C3D187b29DF9FC3fcbDa08Db5eAEA6B",
+      "sourceSha256": "B3F2F228BC78E21218B4A909A5951801B84E9B71249C666855B4921DB6DD921D",
+      "deploymentTx": "0x0c52fd346a0b0e9587263fa7d74d4c7f85488dd3f5f995fef81c43197007eb7e",
+      "finality": "FINALIZED",
+      "execution": "SUCCESS"
+    },
+    "vault": {
+      "address": "0xc79fa1185AAa2a5197226b4673e18ab6D5Ce4305",
+      "sourceSha256": "78B9EC00A371325DDBD1EB2F10A617472DDE1DC2F085EC306310A553CC9BF09C",
+      "deploymentTx": "0x93dcef58ef854e45de68f0d5bc7d8aaba6d0cb414312e7eb50f57efdff603bed",
+      "finality": "FINALIZED",
+      "execution": "SUCCESS"
+    },
+    "binding": {
+      "tx": "0x9b6706ed97043151fb7026a32c9f216cc62defead48ef87409811a9fa4642a64",
+      "finality": "FINALIZED",
+      "execution": "SUCCESS"
+    }
+  },
+  "liveSetup": {
+    "organizationId": 1,
+    "createOrganizationTx": "0x139b47597b250c12e80b483b87eecaa586d59a4b0759315abfbc41ce1814cd33",
+    "secondSourceTx": "0x0acbe4293ffa30378d96ed5470ef84766c591422f415d2c66574f825fc1f056b",
+    "sealTx": "0x0e121885e42d65c644541de82cbe42f17d1c83261d0eca8e05980d40359d034",
+    "canonicalRead": {
+      "organization": "Aevum Hardened Proof",
+      "status": "REVIEW_DUE",
+      "lastOutcome": "INSUFFICIENT_EVIDENCE",
+      "reviewId": 1,
+      "steward": "0xb29Ead15B1E8a2420faE84de974088f67a15ccC2",
+      "vaultBalance": 0,
+      "evidenceTx": "0xc94eb28dd5565b348f7568217af7b0a7333b4ee44e75033b0bc9c33000f8510d"
+    }
+  },
+  "postFixCore": {
+    "address": "0x36644d91971fB5dad4cF41A80a21DB916529Ee0a",
+    "deploymentTx": "0xc9a2f016e44babe30923c28884d7d528a86df55cbd979b7677eee5fd938ce82e",
+    "finality": "FINALIZED",
+    "execution": "SUCCESS",
+    "matchingVault": null
+  },
+  "explorerLinks": {
+    "coreDeployment": "https://explorer-studio.genlayer.com/tx/0x0c52fd346a0b0e9587263fa7d74d4c7f85488dd3f5f995fef81c43197007eb7e",
+    "vaultDeployment": "https://explorer-studio.genlayer.com/tx/0x93dcef58ef854e45de68f0d5bc7d8aaba6d0cb414312e7eb50f57efdff603bed",
+    "binding": "https://explorer-studio.genlayer.com/tx/0x9b6706ed97043151fb7026a32c9f216cc62defead48ef87409811a9fa4642a64"
+  }
+}

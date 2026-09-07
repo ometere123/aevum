@@ -8,10 +8,10 @@ Studionet only: chain ID `61999`, RPC `https://studio.genlayer.com/api`, explore
 
 ## Run
 
-Copy `.env.example` to `.env.local`, set deployed Core and Vault addresses, then run `npm install`, `npm run dev`, `npm run typecheck`, `npm run build`, and `npm test`.
+Copy `.env.production.example` to `.env.local` for the verified Studionet deployment, then run `npm install`, `npm run dev`, `npm run typecheck`, `npm run build`, and `npm test`.
 
-`python scripts/compile-contracts.py` performs Python compilation and `python -m pytest tests/direct -q` runs invariant-oriented contract source checks. `pnpm test:integration` is opt-in and refuses to run without `LIVE_STUDIONET=true`.
+`python scripts/compile-contracts.py` performs Python compilation and `python -m pytest tests/direct -q` runs executable direct-mode lifecycle tests. `npm run test:integration` is opt-in and refuses to run without `LIVE_STUDIONET=true`.
 
 ## Deployment state
 
-This repository is deployment-ready but no funded signer was available in this workspace, so no live address or transaction is claimed. Deploy Core first, then Vault with the Core address, record the source SHA and resulting IDs in `docs/DEPLOYMENT.md`, and populate the public address variables.
+The last matching Core/Vault deployment and its canonical readback are recorded in [`docs/deployment-manifest.json`](docs/deployment-manifest.json). The manifest also records that the final payload-persistence fix is deployed to a fresh Core but does not yet have a matching Vault/lifecycle proof. The frontend must be configured with the exact matching addresses in [`.env.production.example`](.env.production.example); empty values in `.env.example` intentionally fail closed.

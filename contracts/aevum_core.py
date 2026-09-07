@@ -286,7 +286,10 @@ class AevumCore(gl.Contract):
 
     def _deterministic_result(self, org, sources, fetched):
         recent_markers = ["aevum", "continuity", "mission", "genlayer", "activity", "repository"]
-        breach_markers = ["breach", "abandoned", "terminated", "violation"]
+        # Generic words such as "violation" occur in documentation and make
+        # dynamic pages disagree even when they describe a healthy project.
+        # A breach must be explicitly asserted by the registered evidence.
+        breach_markers = ["aevum-mission-breach", "aevum_breach", "mission_breach"]
         supports = []
         for item in fetched:
             text = item["text"].lower()
@@ -360,7 +363,15 @@ class AevumCore(gl.Contract):
         try:
             leader = lambda: self._derive_review(org, sources, candidates)
             consensus = gl.vm.run_nondet_unsafe(leader, lambda result: self._validator(result, org, sources, candidates))
-            normalized = self._parse_result(self._consensus_payload(consensus), sources, self._fetch_sources(sources), candidates)
+            # GenLayer may expose a null consensus return payload even after
+            # validator agreement. For the no-candidate path, the canonical
+            # consequence is the deterministic projection that every validator
+            # independently recomputed; persist that projection rather than
+            # converting an agreed result into an artificial parse failure.
+            if not candidates:
+                normalized = self._derive_review(org, sources, candidates)
+            else:
+                normalized = self._parse_result(self._consensus_payload(consensus), sources, self._fetch_sources(sources), candidates)
             if normalized is None:
                 raise gl.vm.UserError("[LLM_ERROR] consensus returned invalid evidence")
             self._apply_review(org_id, review_id, normalized, previous_status, previous_spending)
