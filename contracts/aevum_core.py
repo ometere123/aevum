@@ -258,6 +258,8 @@ class AevumCore(gl.Contract):
                 "latest_review_id": 0,
                 "pending_review_id": 0,
                 "review_started_at": 0,
+                "review_prior_status": "",
+                "review_prior_spending_enabled": False,
                 "status": ORG_DRAFT,
                 "spending_enabled": False,
                 "last_outcome": SUCCESSOR_NOT_APPLICABLE,
@@ -750,6 +752,8 @@ class AevumCore(gl.Contract):
         org["status"] = ORG_REVIEWING
         org["pending_review_id"] = int(review_id)
         org["review_started_at"] = review_time
+        org["review_prior_status"] = previous_status
+        org["review_prior_spending_enabled"] = previous_spending
         # review_count is organization-local; latest_review_id is the global
         # receipt identifier and must be persisted before either success or
         # retryable failure can be recorded.
@@ -880,6 +884,12 @@ class AevumCore(gl.Contract):
         now = self._now()
         self._require(now >= started + RECOVERY_DELAY, "[EXPECTED] review recovery delay not elapsed")
         pending_id = int(org["pending_review_id"])
+        prior_status = org.get("review_prior_status", "")
+        prior_spending = bool(org.get("review_prior_spending_enabled", False))
+        self._require(
+            prior_status in [ORG_ACTIVE, ORG_REVIEW_DUE, ORG_DORMANT],
+            "[EXPECTED] prior review state unavailable",
+        )
         self._write(
             self.reviews,
             u256(pending_id),
@@ -891,8 +901,8 @@ class AevumCore(gl.Contract):
                 "review_state": "RETRYABLE_ERROR",
                 "error_code": "INTERRUPTED_REVIEW_RECOVERED",
                 "error": "Pending review exceeded the sealed recovery delay.",
-                "prior_status": org["status"],
-                "prior_spending_enabled": org["spending_enabled"],
+                "prior_status": prior_status,
+                "prior_spending_enabled": prior_spending,
                 "current_steward": org["current_steward"],
                 "transition_applied": False,
                 "finalized": False,

@@ -393,8 +393,11 @@ def test_interrupted_review_recovery_is_delayed_and_durable(direct_vm, direct_de
     core.seal_organization(org_id)
     state = json.loads(core.get_organization(org_id))
     state["status"] = "REVIEWING"
+    state["latest_review_id"] = 77
     state["pending_review_id"] = 77
     state["review_started_at"] = 1893456000
+    state["review_prior_status"] = "ACTIVE"
+    state["review_prior_spending_enabled"] = True
     core.organizations[org_id] = json.dumps(state, sort_keys=True, separators=(",", ":"))
     warp(direct_vm, "2030-01-01T00:04:59Z")
     with direct_vm.expect_revert("recovery delay"):
@@ -405,6 +408,47 @@ def test_interrupted_review_recovery_is_delayed_and_durable(direct_vm, direct_de
     receipt = json.loads(core.get_review(77))
     assert recovered["status"] == "REVIEW_DUE"
     assert recovered["pending_review_id"] == 0
+    assert recovered["latest_review_id"] == 77
     assert receipt["error_code"] == "INTERRUPTED_REVIEW_RECOVERED"
+    assert receipt["prior_status"] == "ACTIVE"
+    assert receipt["prior_spending_enabled"] is True
     with direct_vm.expect_revert("no interrupted review"):
         core.recover_review(org_id)
+
+
+@pytest.mark.parametrize(
+    ("prior_status", "prior_spending"),
+    [("ACTIVE", True), ("REVIEW_DUE", True), ("DORMANT", False)],
+)
+def test_recovery_receipt_preserves_pre_review_state(
+    direct_vm, direct_deploy, direct_alice, prior_status, prior_spending
+):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    org_id = create_draft(core, direct_vm, direct_alice)
+    add_two_sources(core, org_id)
+    warp(direct_vm, "2030-01-01T00:00:00Z")
+    core.seal_organization(org_id)
+    state = json.loads(core.get_organization(org_id))
+    state["status"] = "REVIEWING"
+    state["spending_enabled"] = prior_spending
+    state["dormant_since"] = 1893455000 if prior_status == "DORMANT" else 0
+    state["pending_review_id"] = 91
+    state["latest_review_id"] = 91
+    state["review_started_at"] = 1893456000
+    state["review_prior_status"] = prior_status
+    state["review_prior_spending_enabled"] = prior_spending
+    before_steward = state["current_steward"]
+    before_dormant_since = state["dormant_since"]
+    core.organizations[org_id] = json.dumps(state, sort_keys=True, separators=(",", ":"))
+    warp(direct_vm, "2030-01-01T00:05:00Z")
+    core.recover_review(org_id)
+    recovered = json.loads(core.get_organization(org_id))
+    receipt = json.loads(core.get_review(91))
+    assert receipt["prior_status"] == prior_status
+    assert receipt["prior_spending_enabled"] is prior_spending
+    assert recovered["current_steward"] == before_steward
+    assert recovered["spending_enabled"] is prior_spending
+    assert recovered["pending_review_id"] == 0
+    assert recovered["latest_review_id"] == 91
+    assert recovered["dormant_since"] == before_dormant_since
+    assert recovered["status"] == "REVIEW_DUE"

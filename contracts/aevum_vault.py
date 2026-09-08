@@ -4,6 +4,8 @@ import hashlib
 import json
 from datetime import datetime
 
+MAX_U256 = (1 << 256) - 1
+
 
 @gl.contract_interface
 class CoreInterface:
@@ -90,7 +92,10 @@ class AevumVault(gl.Contract):
             "[EXPECTED] organization is not depositable",
         )
         self._require(gl.message.value > 0, "[EXPECTED] deposit must be positive")
-        self.funded[org_id] = self.funded.get(org_id, u256(0)) + gl.message.value
+        current = self.funded.get(org_id, u256(0))
+        amount = u256(gl.message.value)
+        self._require(int(current) <= MAX_U256 - int(amount), "[EXPECTED] funded overflow")
+        self.funded[org_id] = current + amount
 
     @gl.public.write
     def release(self, org_id, recipient, amount, memo_hash):
@@ -125,11 +130,14 @@ class AevumVault(gl.Contract):
         elif now >= start + u256(policy["epoch_seconds"]):
             start = now
             spent = u256(0)
+        self._require(int(spent) <= MAX_U256 - int(amount), "[EXPECTED] epoch spent overflow")
         self._require(spent + amount <= u256(policy["release_cap"]), "[EXPECTED] epoch cap exceeded")
 
         self.epoch_start[org_id] = start
         self.epoch_spent[org_id] = spent + amount
-        self.released[org_id] = self.released.get(org_id, u256(0)) + amount
+        current_released = self.released.get(org_id, u256(0))
+        self._require(int(current_released) <= MAX_U256 - int(amount), "[EXPECTED] released overflow")
+        self.released[org_id] = current_released + amount
         self.used_releases[release_key] = True
         Recipient(Address(recipient_address)).emit_transfer(value=amount, on="finalized")
 
@@ -145,7 +153,9 @@ class AevumVault(gl.Contract):
             len(recipient) == 42 and recipient.startswith("0x") and recipient.lower() != "0x0000000000000000000000000000000000000000",
             "[EXPECTED] invalid recovery recipient",
         )
-        self.recovered[org_id] = self.recovered.get(org_id, u256(0)) + amount
+        current_recovered = self.recovered.get(org_id, u256(0))
+        self._require(int(current_recovered) <= MAX_U256 - int(amount), "[EXPECTED] recovered overflow")
+        self.recovered[org_id] = current_recovered + amount
         self.recovery_used[org_id] = True
         Recipient(Address(recipient)).emit_transfer(value=amount, on="finalized")
 
