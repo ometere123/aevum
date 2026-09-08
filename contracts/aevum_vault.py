@@ -150,7 +150,7 @@ class AevumVault(gl.Contract):
         Recipient(Address(recipient)).emit_transfer(value=amount, on="finalized")
 
     @gl.public.view
-    def get_vault(self, org_id):
+    def get_vault(self, org_id) -> str:
         funded = self.funded.get(org_id, u256(0))
         released = self.released.get(org_id, u256(0))
         recovered = self.recovered.get(org_id, u256(0))
@@ -159,18 +159,18 @@ class AevumVault(gl.Contract):
         return json.dumps(
             {
                 "org_id": int(org_id),
-                "funded": int(funded),
-                "released": int(released),
-                "recovered": int(recovered),
-                "balance": int(self._balance(org_id)),
+                "funded": str(int(funded)),
+                "released": str(int(released)),
+                "recovered": str(int(recovered)),
+                "balance": str(int(self._balance(org_id))),
                 "epoch_start": int(start),
-                "epoch_spent": int(spent),
+                "epoch_spent": str(int(spent)),
             },
             sort_keys=True,
         )
 
     @gl.public.view
-    def remaining_epoch_allowance(self, org_id):
+    def remaining_epoch_allowance(self, org_id) -> int:
         policy = json.loads(self._core().view().get_treasury_policy(org_id))
         cap = u256(policy["release_cap"])
         start = self.epoch_start.get(org_id, u256(0))
@@ -181,10 +181,10 @@ class AevumVault(gl.Contract):
         return int(cap - spent) if spent < cap else 0
 
     @gl.public.view
-    def was_release_used(self, org_id, memo_hash):
+    def was_release_used(self, org_id, memo_hash) -> bool:
         memo = self._memo(memo_hash)
         return self.used_releases.get(self._release_key(org_id, memo), False)
 
     @gl.public.view
-    def get_core_address(self):
+    def get_core_address(self) -> str:
         return str(self.core_address)

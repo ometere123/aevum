@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run network:guard && npm run env:check -- --required && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.mjs",
     "test:watch": "vitest",
     "contract:sha": "node scripts/contract-sha.mjs",
     "network:guard": "node scripts/network-guard.mjs",
@@ -36,6 +36,7 @@
     "@types/react-dom": "19.0.2",
     "eslint": "9.39.1",
     "eslint-config-next": "16.3.4",
+    "es-abstract": "1.24.2",
     "jsdom": "25.0.1",
     "typescript": "5.7.2",
     "vitest": "2.1.8"

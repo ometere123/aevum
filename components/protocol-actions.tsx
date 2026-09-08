@@ -1,6 +1,7 @@
 "use client";
 
 import {keccak256,stringToHex} from "viem";
+import {createClient} from "genlayer-js";
 import {useState} from "react";
 import {useWallet} from "../lib/genlayer/wallet";
 import {classifyWalletError,confirmWrite,explorerTx} from "../lib/genlayer/transactions";
@@ -8,22 +9,25 @@ import {env,assertConfigured} from "../lib/config";
 import {depositSchema,releaseSchema,sourceSchema} from "../lib/validation/forms";
 import {parseGen,formatGen} from "../lib/genlayer/gen";
 import {readAllowance,readCandidates,readOrganization,readReleaseUsed,readSources,readVault} from "../lib/genlayer/reads";
+import {rememberSubmittedTransaction,updateStoredTransaction} from "../lib/genlayer/transaction-store";
+
+type CalldataEncodable = string | bigint;
 
 function TxProof({hash}:{hash?:string}){return hash?<a className="mono text-[10px] underline" href={explorerTx(hash)} target="_blank" rel="noreferrer">View transaction on Explorer ↗</a>:null}
 
 export function ProtocolActions({orgId}:{orgId:string}){
-  const {address,writeClient,chainOk}=useWallet();
+  const {address,ensureWriteReady}=useWallet();
   const [state,setState]=useState("");const [tx,setTx]=useState<string>();const [busy,setBusy]=useState(false);
   const [source,setSource]=useState({label:"",url:"",purpose:"official_site"});
   const [manifesto,setManifesto]=useState("");
 
-  const write=async(functionName:string,args:unknown[],verify:()=>Promise<void>)=>{
+  const write=async(functionName:string,args:CalldataEncodable[],verify:()=>Promise<void>)=>{
     if(busy)return;
     try{
-      assertConfigured();if(!chainOk)throw new Error("WRONG_NETWORK: switch wallet to Studionet 61999");if(!address||!writeClient)throw new Error("Connect a wallet before signing.");
-      setBusy(true);setState("AWAITING_SIGNATURE");setTx(undefined);await writeClient.connect("studionet");
-      const hash=await writeClient.writeContract({address:env.coreAddress as `0x${string}`,functionName,args});setTx(hash);setState(`SUBMITTED ${hash}`);
-      const final=await confirmWrite(writeClient,hash,verify);setState(final.stage==="EXECUTION_CONFIRMED"?final.stage:`${final.stage}: ${final.error??"not confirmed"}`);
+      assertConfigured();
+      setBusy(true);setState("AWAITING_SIGNATURE");setTx(undefined);const session=await ensureWriteReady();
+      const hash=await session.client.writeContract({address:env.coreAddress as `0x${string}`,functionName,args,value:0n});const actionKey=`core:${orgId}:${functionName}`;rememberSubmittedTransaction({actionKey,account:session.address,chainId:"0xf22f",contract:env.coreAddress,method:functionName,args,hash});setTx(hash);setState(`SUBMITTED ${hash}`);
+      const final=await confirmWrite(session.client,hash,verify);updateStoredTransaction(actionKey,session.address,final.stage);setState(final.stage==="EXECUTION_CONFIRMED"?final.stage:`${final.stage}: ${final.error??"not confirmed"}`);
     }catch(error){const classified=classifyWalletError(error);setState(`${classified.stage}: ${classified.error??"write failed"}`)}finally{setBusy(false)}
   };
 
@@ -62,19 +66,19 @@ export function ProtocolActions({orgId}:{orgId:string}){
 }
 
 export function VaultActions({orgId,onChanged}:{orgId:string,onChanged?:()=>Promise<void>}){
-  const {address,writeClient,chainOk}=useWallet();
+  const {address,ensureWriteReady}=useWallet();
   const [state,setState]=useState("");const [tx,setTx]=useState<string>();const [busy,setBusy]=useState(false);
   const [depositAmount,setDepositAmount]=useState("0.001");
   const [release,setRelease]=useState({recipient:"",amountGen:"0.001",memo:"mission release"});
 
-  const preflight=()=>{assertConfigured();if(!chainOk)throw new Error("WRONG_NETWORK: switch wallet to Studionet 61999");if(!address||!writeClient)throw new Error("Connect a wallet before signing.");return writeClient};
-  const finish=async(hash:`0x${string}`,verify:()=>Promise<void>)=>{setTx(hash);setState(`SUBMITTED ${hash}`);const client=writeClient!;const final=await confirmWrite(client,hash,async()=>{await verify();await onChanged?.()});setState(final.stage==="EXECUTION_CONFIRMED"?final.stage:`${final.stage}: ${final.error??"not confirmed"}`)};
+  const preflight=async()=>{assertConfigured();return ensureWriteReady()};
+  const finish=async(client:ReturnType<typeof createClient>,hash:`0x${string}`,verify:()=>Promise<void>,actionKey:string,method:string,args:unknown[],account:string)=>{rememberSubmittedTransaction({actionKey,account,chainId:"0xf22f",contract:env.vaultAddress,method,args,hash});setTx(hash);setState(`SUBMITTED ${hash}`);const final=await confirmWrite(client,hash,async()=>{await verify();await onChanged?.()});updateStoredTransaction(actionKey,account,final.stage);setState(final.stage==="EXECUTION_CONFIRMED"?final.stage:`${final.stage}: ${final.error??"not confirmed"}`)};
 
-  const deposit=async()=>{if(busy)return;const parsed=depositSchema.safeParse({amountGen:depositAmount});if(!parsed.success){setState(parsed.error.issues[0]?.message??"Invalid deposit");return}try{const client=preflight();const amount=parseGen(parsed.data.amountGen);const before=await readVault(orgId);setBusy(true);setState("AWAITING_SIGNATURE");await client.connect("studionet");const hash=await client.writeContract({address:env.vaultAddress as `0x${string}`,functionName:"deposit",args:[BigInt(orgId)],value:amount});await finish(hash,async()=>{const after=await readVault(orgId);if(BigInt(after.balance)!==BigInt(before.balance)+amount)throw new Error("STATE_MISMATCH: Vault balance did not increase by the exact deposit")})}catch(error){const classified=classifyWalletError(error);setState(`${classified.stage}: ${classified.error??"deposit failed"}`)}finally{setBusy(false)}};
+  const deposit=async()=>{if(busy)return;const parsed=depositSchema.safeParse({amountGen:depositAmount});if(!parsed.success){setState(parsed.error.issues[0]?.message??"Invalid deposit");return}try{const session=await preflight();const client=session.client;const amount=parseGen(parsed.data.amountGen);const before=await readVault(orgId);setBusy(true);setState("AWAITING_SIGNATURE");const args=[BigInt(orgId)];const hash=await client.writeContract({address:env.vaultAddress as `0x${string}`,functionName:"deposit",args,value:amount});await finish(client,hash,async()=>{const after=await readVault(orgId);if(BigInt(after.balance)!==BigInt(before.balance)+amount)throw new Error("STATE_MISMATCH: Vault balance did not increase by the exact deposit")},`vault:${orgId}:deposit`,"deposit",args,session.address)}catch(error){const classified=classifyWalletError(error);setState(`${classified.stage}: ${classified.error??"deposit failed"}`)}finally{setBusy(false)}};
 
-  const releaseFunds=async()=>{if(busy)return;const candidate={...release,recipient:release.recipient||address||""};const parsed=releaseSchema.safeParse(candidate);if(!parsed.success){setState(parsed.error.issues[0]?.message??"Invalid release");return}try{const client=preflight();const amount=parseGen(parsed.data.amountGen);const memoHash=keccak256(stringToHex(`${orgId}:${parsed.data.recipient.toLowerCase()}:${parsed.data.amountGen}:${parsed.data.memo.trim()}`));const before=await readVault(orgId);setBusy(true);setState(`AWAITING_SIGNATURE / ${formatGen(amount)} GEN / ${amount} wei / memo ${memoHash}`);await client.connect("studionet");const hash=await client.writeContract({address:env.vaultAddress as `0x${string}`,functionName:"release",args:[BigInt(orgId),parsed.data.recipient,amount,memoHash]});await finish(hash,async()=>{const [after,used]=await Promise.all([readVault(orgId),readReleaseUsed(orgId,memoHash)]);if(BigInt(after.balance)!==BigInt(before.balance)-amount)throw new Error("STATE_MISMATCH: Vault balance did not decrease by the release amount");if(!used)throw new Error("STATE_MISMATCH: memo replay guard was not persisted")})}catch(error){const classified=classifyWalletError(error);setState(`${classified.stage}: ${classified.error??"release failed"}`)}finally{setBusy(false)}};
+  const releaseFunds=async()=>{if(busy)return;const candidate={...release,recipient:release.recipient||address||""};const parsed=releaseSchema.safeParse(candidate);if(!parsed.success){setState(parsed.error.issues[0]?.message??"Invalid release");return}try{const session=await preflight();const client=session.client;const amount=parseGen(parsed.data.amountGen);const memoHash=keccak256(stringToHex(`${orgId}:${parsed.data.recipient.toLowerCase()}:${parsed.data.amountGen}:${parsed.data.memo.trim()}`));const before=await readVault(orgId);setBusy(true);setState(`AWAITING_SIGNATURE / ${formatGen(amount)} GEN / ${amount} wei / memo ${memoHash}`);const args=[BigInt(orgId),parsed.data.recipient,amount,memoHash];const hash=await client.writeContract({address:env.vaultAddress as `0x${string}`,functionName:"release",args,value:0n});await finish(client,hash,async()=>{const [after,used]=await Promise.all([readVault(orgId),readReleaseUsed(orgId,memoHash)]);if(BigInt(after.balance)!==BigInt(before.balance)-amount)throw new Error("STATE_MISMATCH: Vault balance did not decrease by the release amount");if(!used)throw new Error("STATE_MISMATCH: memo replay guard was not persisted")},`vault:${orgId}:release:${memoHash}`,"release",args,session.address)}catch(error){const classified=classifyWalletError(error);setState(`${classified.stage}: ${classified.error??"release failed"}`)}finally{setBusy(false)}};
 
-  const recover=async()=>{if(busy)return;try{const client=preflight();const before=await readVault(orgId);if(BigInt(before.balance)<=0n)throw new Error("Vault is already clear.");setBusy(true);setState("AWAITING_SIGNATURE / dormant treasury recovery");await client.connect("studionet");const hash=await client.writeContract({address:env.vaultAddress as `0x${string}`,functionName:"recover_dormant",args:[BigInt(orgId)]});await finish(hash,async()=>{const after=await readVault(orgId);if(BigInt(after.balance)!==0n)throw new Error("STATE_MISMATCH: dormant recovery did not clear the Vault")})}catch(error){const classified=classifyWalletError(error);setState(`${classified.stage}: ${classified.error??"recovery failed"}`)}finally{setBusy(false)}};
+  const recover=async()=>{if(busy)return;try{const session=await preflight();const client=session.client;const before=await readVault(orgId);if(BigInt(before.balance)<=0n)throw new Error("Vault is already clear.");setBusy(true);setState("AWAITING_SIGNATURE / dormant treasury recovery");const args=[BigInt(orgId)];const hash=await client.writeContract({address:env.vaultAddress as `0x${string}`,functionName:"recover_dormant",args,value:0n});await finish(client,hash,async()=>{const after=await readVault(orgId);if(BigInt(after.balance)!==0n)throw new Error("STATE_MISMATCH: dormant recovery did not clear the Vault")},`vault:${orgId}:recover`,"recover_dormant",args,session.address)}catch(error){const classified=classifyWalletError(error);setState(`${classified.stage}: ${classified.error??"recovery failed"}`)}finally{setBusy(false)}};
 
   return <div className="mt-5 grid gap-5">
     <div className="grid gap-3 md:grid-cols-[1fr_auto]"><label><span className="mono text-[10px] text-[#777269]">DEPOSIT AMOUNT / GEN</span><input aria-label="deposit GEN amount" value={depositAmount} onChange={e=>setDepositAmount(e.target.value)} inputMode="decimal" className="mt-2 w-full border-b border-[#E9E1CF44] bg-transparent p-3 text-xs"/></label><button disabled={busy} onClick={deposit} className="self-end rounded-full bg-[#B8FF5A] px-5 py-3 text-xs font-semibold text-[#0B0B0A] disabled:opacity-40">Deposit GEN</button></div>

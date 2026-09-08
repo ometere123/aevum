@@ -77,3 +77,4 @@ No final hardened deployment, funded native GEN lifecycle, or browser-wallet pro
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - [`docs/REVIEWER_DEMO.md`](docs/REVIEWER_DEMO.md)
 - [`docs/HARDENING_STATUS.md`](docs/HARDENING_STATUS.md)
+- [`docs/LIFECYCLE_EVIDENCE.md`](docs/LIFECYCLE_EVIDENCE.md)

@@ -4,7 +4,7 @@ import hashlib
 import ipaddress
 import json
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 MAX_NAME = 80
 MAX_MISSION = 1200
@@ -17,6 +17,8 @@ MAX_SOURCES = 4
 MIN_SOURCES = 2
 MAX_CANDIDATES = 8
 MAX_FETCH_CHARS = 3000
+MAX_PROMPT_CHARS = 24000
+RECOVERY_DELAY = 300
 
 ORG_DRAFT = "DRAFT"
 ORG_ACTIVE = "ACTIVE"
@@ -102,8 +104,11 @@ class AevumCore(gl.Contract):
         parsed = urlparse(url)
         self._require(parsed.scheme == "https" and parsed.hostname is not None, "[EXPECTED] HTTPS URL required")
         self._require(parsed.username is None and parsed.password is None, "[EXPECTED] credential-bearing URL rejected")
+        self._require(len(url) <= MAX_URL, "[EXPECTED] URL too long")
+        secret_keys = {"key", "access_key", "api_key", "apikey", "authorization", "auth", "bearer", "credential", "password", "passwd", "secret", "token", "signature", "sig"}
+        self._require(not any(str(key).lower() in secret_keys for key, _ in parse_qsl(parsed.query, keep_blank_values=True)), "[EXPECTED] secret-bearing URL rejected")
         host = parsed.hostname.lower().rstrip(".")
-        self._require(host not in ["localhost", "0.0.0.0", "::1"], "[EXPECTED] private host rejected")
+        self._require(host not in ["localhost", "localhost.localdomain", "0.0.0.0", "::1"], "[EXPECTED] private host rejected")
         try:
             address = ipaddress.ip_address(host)
             self._require(
@@ -126,7 +131,8 @@ class AevumCore(gl.Contract):
             isinstance(url, str)
             and 12 <= len(url) <= MAX_URL
             and url.startswith("https://")
-            and all(x not in url.lower() for x in ["password=", "token=", "secret=", "apikey="])
+            and "\n" not in url
+            and "\r" not in url
         )
 
     def _sources_for(self, org_id):
@@ -249,7 +255,9 @@ class AevumCore(gl.Contract):
                 "candidate_ids": [],
                 "candidate_count": 0,
                 "review_count": 0,
+                "latest_review_id": 0,
                 "pending_review_id": 0,
+                "review_started_at": 0,
                 "status": ORG_DRAFT,
                 "spending_enabled": False,
                 "last_outcome": SUCCESSOR_NOT_APPLICABLE,
@@ -445,7 +453,7 @@ class AevumCore(gl.Contract):
         if not isinstance(raw, dict):
             return None
         reason = raw.get("reason")
-        if not isinstance(reason, str) or len(reason) > MAX_REASON:
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > MAX_REASON:
             return None
         raw_sources = raw.get("sources")
         if not isinstance(raw_sources, list) or len(raw_sources) != len(sources):
@@ -591,11 +599,34 @@ class AevumCore(gl.Contract):
         fetched_sources = self._fetch_sources(sources)
         fetched_candidates = self._fetch_candidates(candidates)
         prompt = self._prompt(org, fetched_sources, fetched_candidates, review_time)
+        if len(prompt) > MAX_PROMPT_CHARS:
+            raise gl.vm.UserError("[LLM_ERROR] continuity prompt too large")
         raw = gl.nondet.exec_prompt(prompt, response_format="json")
         parsed = self._parse_assessment(raw, org, sources, fetched_sources, candidates, fetched_candidates, review_time)
         if parsed is None:
             raise gl.vm.UserError("[LLM_ERROR] invalid continuity assessment")
         return parsed
+
+    def _failure_code(self, error):
+        message = str(error)
+        if "prompt too large" in message:
+            return "MODEL_TIMEOUT"
+        if "LLM_ERROR" in message or "invalid continuity assessment" in message:
+            return "LLM_MALFORMED"
+        if "source" in message.lower() or "web" in message.lower():
+            return "SOURCE_UNAVAILABLE"
+        return "MODEL_TIMEOUT"
+
+    def _review_envelope(self, org, sources, candidates, review_time):
+        """Return a bounded value from the nondeterministic boundary.
+
+        Expected retrieval/model failures are data, not exceptions escaping the
+        validator boundary.  The deterministic caller applies the envelope.
+        """
+        try:
+            return {"kind": "DECISION", "decision": self._derive_review(org, sources, candidates, review_time)}
+        except Exception as error:
+            return {"kind": "RETRYABLE_ERROR", "code": self._failure_code(error)}
 
     def _same_consequence(self, leader, validator):
         if leader is None or validator is None:
@@ -628,16 +659,80 @@ class AevumCore(gl.Contract):
         leader = leader_result.calldata
         if not isinstance(leader, dict):
             return False
-        try:
-            validator = self._derive_review(org, sources, candidates, review_time)
-        except Exception:
+        if not isinstance(leader.get("kind"), str):
             return False
-        return self._same_consequence(leader, validator)
+        validator = self._review_envelope(org, sources, candidates, review_time)
+        if leader["kind"] == "RETRYABLE_ERROR":
+            return validator.get("kind") == "RETRYABLE_ERROR" and validator.get("code") == leader.get("code")
+        if leader["kind"] != "DECISION" or not isinstance(leader.get("decision"), dict):
+            return False
+        if validator.get("kind") != "DECISION" or not isinstance(validator.get("decision"), dict):
+            return False
+        return self._same_consequence(leader["decision"], validator["decision"])
+
+    def _envelope_is_well_formed(self, result):
+        if not isinstance(result, gl.vm.Return) or not isinstance(result.calldata, dict):
+            return False
+        payload = result.calldata
+        if payload.get("kind") == "RETRYABLE_ERROR":
+            return payload.get("code") in ["LLM_MALFORMED", "SOURCE_TRANSIENT", "SOURCE_UNAVAILABLE", "SOURCE_MALFORMED", "MODEL_TIMEOUT"]
+        return payload.get("kind") == "DECISION" and isinstance(payload.get("decision"), dict)
 
     def _consensus_payload(self, result):
         if isinstance(result, gl.vm.Return):
             return result.calldata
         return result if isinstance(result, dict) else None
+
+    def _run_review_consensus(self, org, sources, candidates, review_time):
+        """Run the leader and independently replay the evidence in validation."""
+        def run_review():
+            return self._review_envelope(org, sources, candidates, review_time)
+
+        def validator_fn(leader_result):
+            if not isinstance(leader_result, gl.vm.Return):
+                return False
+            leader = leader_result.calldata
+            if not self._envelope_is_well_formed(leader_result):
+                return False
+            validator = run_review()
+            if leader.get("kind") == "RETRYABLE_ERROR":
+                return validator.get("kind") == "RETRYABLE_ERROR" and validator.get("code") == leader.get("code")
+            return validator.get("kind") == "DECISION" and self._same_consequence(leader.get("decision"), validator.get("decision"))
+
+        return gl.vm.run_nondet_unsafe(run_review, validator_fn)
+
+    def _record_retryable_review(self, org_id, review_id, org, review_time, code, previous_status, previous_spending, error_text=""):
+        current = self._read(self.organizations, org_id)
+        current["status"] = previous_status if previous_status == ORG_DORMANT else ORG_REVIEW_DUE
+        current["spending_enabled"] = previous_spending
+        current["pending_review_id"] = 0
+        current["review_started_at"] = 0
+        current["latest_review_id"] = int(review_id)
+        self._write(self.organizations, org_id, current)
+        self._write(
+            self.reviews,
+            review_id,
+            {
+                "review_id": int(review_id),
+                "organization_id": int(org_id),
+                "charter_definition_hash": org["definition_hash"],
+                "review_timestamp": review_time,
+                "review_state": "RETRYABLE_ERROR",
+                "error_code": code,
+                "error": error_text[:MAX_REASON],
+                "prior_status": previous_status,
+                "prior_spending_enabled": previous_spending,
+                "outcome": "",
+                "successor_outcome": "",
+                "selected_candidate_id": -1,
+                "selected_candidate_address": "",
+                "source_support": [],
+                "candidate_support": [],
+                "transition_applied": False,
+                "resulting_steward": org["current_steward"],
+                "finalized": False,
+            },
+        )
 
     @gl.public.write
     def trigger_continuity_review(self, org_id):
@@ -654,21 +749,38 @@ class AevumCore(gl.Contract):
         review_time = self._now()
         org["status"] = ORG_REVIEWING
         org["pending_review_id"] = int(review_id)
+        org["review_started_at"] = review_time
+        # review_count is organization-local; latest_review_id is the global
+        # receipt identifier and must be persisted before either success or
+        # retryable failure can be recorded.
+        org["latest_review_id"] = int(review_id)
         self._write(self.organizations, org_id, org)
         try:
-            leader = lambda: self._derive_review(org, sources, candidates, review_time)
-            consensus = gl.vm.run_nondet_unsafe(
-                leader,
-                lambda result: self._validator(result, org, sources, candidates, review_time),
-            )
+            consensus = self._run_review_consensus(org, sources, candidates, review_time)
             normalized = self._consensus_payload(consensus)
             self._require(isinstance(normalized, dict), "[LLM_ERROR] consensus returned no payload")
-            self._apply_review(org_id, review_id, normalized, previous_status, previous_spending, review_time)
+            if normalized.get("kind") == "RETRYABLE_ERROR":
+                self._record_retryable_review(
+                    org_id,
+                    review_id,
+                    org,
+                    review_time,
+                    normalized.get("code", "MODEL_TIMEOUT"),
+                    previous_status,
+                    previous_spending,
+                )
+            else:
+                self._require(normalized.get("kind") == "DECISION", "[LLM_ERROR] invalid consensus envelope")
+                self._apply_review(org_id, review_id, normalized["decision"], previous_status, previous_spending, review_time)
         except Exception as error:
             current = self._read(self.organizations, org_id)
             current["status"] = previous_status if previous_status == ORG_DORMANT else ORG_REVIEW_DUE
             current["spending_enabled"] = previous_spending
             current["pending_review_id"] = 0
+            current["review_started_at"] = 0
+            current["latest_review_id"] = int(review_id)
+            message = str(error)[:MAX_REASON]
+            error_code = "LLM_MALFORMED" if "LLM_ERROR" in message or "invalid continuity assessment" in message else "CONSENSUS_OR_RUNTIME_ERROR"
             self._write(self.organizations, org_id, current)
             self._write(
                 self.reviews,
@@ -679,8 +791,10 @@ class AevumCore(gl.Contract):
                     "charter_definition_hash": current["definition_hash"],
                     "review_timestamp": review_time,
                     "review_state": "RETRYABLE_ERROR",
-                    "error_code": "CONSENSUS_OR_RUNTIME_ERROR",
-                    "error": str(error)[:MAX_REASON],
+                    "error_code": error_code,
+                    "error": message,
+                    "prior_status": previous_status,
+                    "prior_spending_enabled": previous_spending,
                     "outcome": "",
                     "successor_outcome": "",
                     "selected_candidate_id": -1,
@@ -728,7 +842,9 @@ class AevumCore(gl.Contract):
         org["current_steward"] = resulting
         org["last_review"] = review_time
         org["review_count"] += 1
+        org["latest_review_id"] = int(review_id)
         org["pending_review_id"] = 0
+        org["review_started_at"] = 0
         org["last_outcome"] = result["activity_outcome"]
         self._write(self.organizations, org_id, org)
         self._write(
@@ -759,8 +875,33 @@ class AevumCore(gl.Contract):
     def recover_review(self, org_id):
         org = self._read(self.organizations, org_id)
         self._require(org["status"] == ORG_REVIEWING and org["pending_review_id"] > 0, "[EXPECTED] no interrupted review")
+        started = int(org.get("review_started_at", 0))
+        self._require(started > 0, "[EXPECTED] review start timestamp unavailable")
+        now = self._now()
+        self._require(now >= started + RECOVERY_DELAY, "[EXPECTED] review recovery delay not elapsed")
+        pending_id = int(org["pending_review_id"])
+        self._write(
+            self.reviews,
+            u256(pending_id),
+            {
+                "review_id": pending_id,
+                "organization_id": int(org_id),
+                "charter_definition_hash": org["definition_hash"],
+                "review_timestamp": started,
+                "review_state": "RETRYABLE_ERROR",
+                "error_code": "INTERRUPTED_REVIEW_RECOVERED",
+                "error": "Pending review exceeded the sealed recovery delay.",
+                "prior_status": org["status"],
+                "prior_spending_enabled": org["spending_enabled"],
+                "current_steward": org["current_steward"],
+                "transition_applied": False,
+                "finalized": False,
+                "recovered_at": now,
+            },
+        )
         org["status"] = ORG_REVIEW_DUE
         org["pending_review_id"] = 0
+        org["review_started_at"] = 0
         self._write(self.organizations, org_id, org)
 
     @gl.public.write
@@ -777,66 +918,66 @@ class AevumCore(gl.Contract):
         self._write(self.organizations, org_id, org)
 
     @gl.public.view
-    def get_organization(self, org_id):
+    def get_organization(self, org_id) -> str:
         return json.dumps(self._read(self.organizations, org_id), sort_keys=True)
 
     @gl.public.view
-    def get_organization_count(self):
+    def get_organization_count(self) -> int:
         return int(self.next_org_id - 1)
 
     @gl.public.view
-    def get_organization_by_index(self, index):
+    def get_organization_by_index(self, index) -> str:
         return json.dumps(self._read(self.organizations, u256(int(index))), sort_keys=True)
 
     @gl.public.view
-    def get_source(self, org_id, source_id):
+    def get_source(self, org_id, source_id) -> str:
         source = self._read(self.sources, source_id)
         self._require(source["org_id"] == int(org_id), "[EXPECTED] source does not belong to organization")
         return json.dumps(source, sort_keys=True)
 
     @gl.public.view
-    def get_source_by_index(self, org_id, index):
+    def get_source_by_index(self, org_id, index) -> str:
         org = self._read(self.organizations, org_id)
         idx = int(index)
         self._require(0 <= idx < len(org["source_ids"]), "[EXPECTED] source index out of range")
         return self.get_source(org_id, u256(org["source_ids"][idx]))
 
     @gl.public.view
-    def get_candidate(self, org_id, candidate_id):
+    def get_candidate(self, org_id, candidate_id) -> str:
         candidate = self._read(self.candidates, candidate_id)
         self._require(candidate["org_id"] == int(org_id), "[EXPECTED] candidate does not belong to organization")
         return json.dumps(candidate, sort_keys=True)
 
     @gl.public.view
-    def get_candidate_by_index(self, org_id, index):
+    def get_candidate_by_index(self, org_id, index) -> str:
         org = self._read(self.organizations, org_id)
         idx = int(index)
         self._require(0 <= idx < len(org["candidate_ids"]), "[EXPECTED] candidate index out of range")
         return self.get_candidate(org_id, u256(org["candidate_ids"][idx]))
 
     @gl.public.view
-    def get_review(self, review_id):
+    def get_review(self, review_id) -> str:
         return json.dumps(self._read(self.reviews, review_id), sort_keys=True)
 
     @gl.public.view
-    def current_steward(self, org_id):
+    def current_steward(self, org_id) -> str:
         return self._read(self.organizations, org_id)["current_steward"]
 
     @gl.public.view
-    def current_definition_hash(self, org_id):
+    def current_definition_hash(self, org_id) -> str:
         return self._read(self.organizations, org_id)["definition_hash"]
 
     @gl.public.view
-    def is_spending_enabled(self, org_id):
+    def is_spending_enabled(self, org_id) -> bool:
         return self._read(self.organizations, org_id)["spending_enabled"]
 
     @gl.public.view
-    def get_treasury_policy(self, org_id):
+    def get_treasury_policy(self, org_id) -> str:
         org = self._read(self.organizations, org_id)
         return json.dumps({"epoch_seconds": org["epoch_seconds"], "release_cap": org["release_cap"]}, sort_keys=True)
 
     @gl.public.view
-    def get_recovery_policy(self, org_id):
+    def get_recovery_policy(self, org_id) -> str:
         org = self._read(self.organizations, org_id)
         return json.dumps(
             {
@@ -848,7 +989,7 @@ class AevumCore(gl.Contract):
         )
 
     @gl.public.view
-    def can_recover_treasury(self, org_id):
+    def can_recover_treasury(self, org_id) -> bool:
         org = self._read(self.organizations, org_id)
         return (
             org["status"] == ORG_DORMANT
@@ -859,11 +1000,11 @@ class AevumCore(gl.Contract):
         )
 
     @gl.public.view
-    def get_vault_address(self):
+    def get_vault_address(self) -> str:
         return str(self.vault_address)
 
     @gl.public.view
-    def is_review_due(self, org_id):
+    def is_review_due(self, org_id) -> bool:
         org = self._read(self.organizations, org_id)
         return (
             org["sealed"]

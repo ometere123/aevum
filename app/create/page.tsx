@@ -8,9 +8,10 @@ import {classifyWalletError,confirmWrite,explorerTx} from "../../lib/genlayer/tr
 import {env,assertConfigured} from "../../lib/config";
 import {parseGen} from "../../lib/genlayer/gen";
 import {readOrganization,readOrganizations} from "../../lib/genlayer/reads";
+import {rememberSubmittedTransaction,updateStoredTransaction} from "../../lib/genlayer/transaction-store";
 
 export default function Create(){
-  const {address,writeClient,chainOk}=useWallet();
+  const {address,ensureWriteReady}=useWallet();
   const [message,setMessage]=useState("");
   const [busy,setBusy]=useState(false);
   const [tx,setTx]=useState<string>();
@@ -34,15 +35,11 @@ export default function Create(){
     if(!parsed.success){setMessage(parsed.error.issues[0]?.message??"Check the charter");return}
     try{
       assertConfigured();
-      if(!chainOk) throw new Error("WRONG_NETWORK: switch wallet to Studionet 61999");
-      if(!address||!writeClient) throw new Error("Connect a Studionet wallet to write the charter.");
+      if(!address) throw new Error("Connect a Studionet wallet to write the charter.");
       setBusy(true);setMessage("AWAITING_SIGNATURE");setCreatedId(undefined);
       const before=await readOrganizations();
-      await writeClient.connect("studionet");
-      const hash=await writeClient.writeContract({
-        address:env.coreAddress as `0x${string}`,
-        functionName:"create_organization",
-        args:[
+      const session=await ensureWriteReady();
+      const args=[
           parsed.data.name,
           parsed.data.mission,
           parsed.data.successionCriteria,
@@ -52,12 +49,17 @@ export default function Create(){
           parseGen(parsed.data.releaseCapGen),
           parsed.data.recoveryRecipient,
           BigInt(parsed.data.closureDelay),
-        ],
+        ];
+      const hash=await session.client.writeContract({
+        address:env.coreAddress as `0x${string}`,
+        functionName:"create_organization",
+        args,
         value:0n,
       });
+      const actionKey="core:create_organization";rememberSubmittedTransaction({actionKey,account:session.address,chainId:"0xf22f",contract:env.coreAddress,method:"create_organization",args,hash});
       setTx(hash);setMessage(`SUBMITTED ${hash}`);
       let confirmedId="";
-      const final=await confirmWrite(writeClient,hash,async()=>{
+      const final=await confirmWrite(session.client,hash,async()=>{
         const after=await readOrganizations();
         if(after.length!==before.length+1) throw new Error("STATE_MISMATCH: organization count did not increase by one");
         const newest=after[after.length-1];
@@ -65,7 +67,7 @@ export default function Create(){
         const canonical=await readOrganization(confirmedId);
         if(String(canonical.creator).toLowerCase()!==address.toLowerCase()||canonical.name!==parsed.data.name) throw new Error("STATE_MISMATCH: canonical organization does not match the submitted charter");
       });
-      if(final.stage==="EXECUTION_CONFIRMED"){setCreatedId(confirmedId);setMessage(`EXECUTION_CONFIRMED / organization ${confirmedId}`)}else setMessage(`${final.stage}: ${final.error??"transaction not confirmed"}`);
+      updateStoredTransaction(actionKey,session.address,final.stage);if(final.stage==="EXECUTION_CONFIRMED"){setCreatedId(confirmedId);setMessage(`EXECUTION_CONFIRMED / organization ${confirmedId}`)}else setMessage(`${final.stage}: ${final.error??"transaction not confirmed"}`);
     }catch(error){const state=classifyWalletError(error);setMessage(`${state.stage}: ${state.error??"write failed"}`)}finally{setBusy(false)}
   };
 

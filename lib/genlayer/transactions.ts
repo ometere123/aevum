@@ -11,6 +11,7 @@ export type TxStage=
   |"WRONG_NETWORK"
   |"CONTRACT_ERROR"
   |"CONSENSUS_FAILURE"
+  |"CONSENSUS_UNDETERMINED"
   |"EXECUTION_ERROR"
   |"RPC_UNAVAILABLE"
   |"FINALITY_TIMEOUT"
@@ -28,6 +29,26 @@ export function classifyWalletError(error:unknown):TxState{
   return {stage:"CONTRACT_ERROR",error:message||"Contract write failed"};
 }
 
+function nestedReceiptText(receipt:unknown, keys:string[]):string{
+  if(!receipt||typeof receipt!=="object") return "";
+  const record=receipt as Record<string,unknown>;
+  for(const key of keys){
+    const value=record[key];
+    if(typeof value==="string"&&value) return value;
+    if(value&&typeof value==="object"){
+      const nested=nestedReceiptText(value,keys);
+      if(nested) return nested;
+    }
+  }
+  for(const value of Object.values(record)){
+    if(value&&typeof value==="object"){
+      const nested=nestedReceiptText(value,keys);
+      if(nested) return nested;
+    }
+  }
+  return "";
+}
+
 export async function confirmWrite(
   client: ReturnType<typeof createClient>,
   hash: `0x${string}`,
@@ -42,11 +63,11 @@ export async function confirmWrite(
     return {stage:/timeout/i.test(message)?"FINALITY_TIMEOUT":"RPC_UNAVAILABLE",hash,error:message};
   }
 
-  const item=receipt as {statusName?:string;txExecutionResultName?:string;resultName?:string;status?:string};
-  const resultName=String(item.txExecutionResultName??item.resultName??"").toUpperCase();
-  const statusName=String(item.statusName??item.status??"").toUpperCase();
+  const resultName=nestedReceiptText(receipt,["txExecutionResultName","executionResultName","resultName","execution_result","result","name"]).toUpperCase();
+  const statusName=nestedReceiptText(receipt,["statusName","status","decision","consensusStatus"]).toUpperCase();
   const successful=(client as unknown as {isSuccessful?: (receipt:unknown)=>boolean}).isSuccessful;
 
+  if(statusName.includes("UNDETERMINED")||resultName.includes("UNDETERMINED")) return {stage:"CONSENSUS_UNDETERMINED",hash,error:"Validators could not reach majority. This transaction was not executed."};
   if(statusName!=="FINALIZED") return {stage:"CONSENSUS_FAILURE",hash,error:`Transaction did not finalize: ${statusName||"unknown status"}`};
   if(successful&& !successful(receipt)) return {stage:"EXECUTION_ERROR",hash,error:"Authoritative SDK success check failed"};
   if(!successful&&resultName!=="SUCCESS") return {stage:"EXECUTION_ERROR",hash,error:resultName||"unknown execution result"};

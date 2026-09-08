@@ -1,6 +1,11 @@
 import json
 import pytest
-from genlayer import Address
+
+
+def account_address(account):
+    if isinstance(account, (bytes, bytearray)):
+        return "0x" + bytes(account).hex()
+    return account.address.lower()
 
 
 def warp(direct_vm, timestamp):
@@ -39,14 +44,14 @@ def configure_source_web(direct_vm, body):
     direct_vm.mock_web(r".*aevum-test\.org.*", {"status": 200, "body": body})
 
 
-def response(review_time, recent=True, breach=False, contradictory=False, candidates=None):
+def response(review_time, recent=True, breach=False, contradictory=False, candidates=None, source_ids=(1, 2)):
     candidates = candidates or []
     latest = review_time - 30 if recent else review_time - 1000
     return json.dumps(
         {
             "sources": [
                 {
-                    "source_id": 1,
+                    "source_id": source_ids[0],
                     "available": True,
                     "mission_aligned": not breach,
                     "freshness_observable": True,
@@ -57,7 +62,7 @@ def response(review_time, recent=True, breach=False, contradictory=False, candid
                     "excerpt": "Mission evidence 2030",
                 },
                 {
-                    "source_id": 2,
+                    "source_id": source_ids[1],
                     "available": True,
                     "mission_aligned": not breach,
                     "freshness_observable": True,
@@ -174,7 +179,7 @@ def test_contradictory_evidence_fails_safe(direct_vm, direct_deploy, direct_alic
     assert direct_vm.run_validator() is True
     org = json.loads(core.get_organization(org_id))
     assert org["last_outcome"] == "INSUFFICIENT_EVIDENCE"
-    assert org["current_steward"] == str(Address(direct_alice)).lower()
+    assert org["current_steward"] == account_address(direct_alice)
 
 
 def test_candidate_manifesto_is_fetched_and_lowest_eligible_id_selected(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
@@ -198,7 +203,7 @@ def test_candidate_manifesto_is_fetched_and_lowest_eligible_id_selected(direct_v
     direct_vm.mock_llm(r"Assess mission continuity", response(1893456120, recent=False, candidates=candidate_rows))
     core.trigger_continuity_review(org_id)
     assert direct_vm.run_validator() is True
-    assert core.current_steward(org_id) == str(Address(direct_bob)).lower()
+    assert core.current_steward(org_id) == account_address(direct_bob)
     review = json.loads(core.get_review(1))
     assert review["successor_outcome"] == "SUCCESSOR_SELECTED"
     assert review["selected_candidate_id"] == c1
@@ -256,3 +261,150 @@ def test_review_deadline_boundary(direct_vm, direct_deploy, direct_alice):
 def test_vault_rejects_invalid_core_address(direct_vm, direct_deploy):
     with direct_vm.expect_revert("invalid Core contract address"):
         direct_deploy("contracts/aevum_vault.py", "0x0000000000000000000000000000000000000000")
+
+
+def test_latest_review_id_is_global_and_org_scoped_with_interleaved_reviews(direct_vm, direct_deploy, direct_alice):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    first = create_draft(core, direct_vm, direct_alice, name="First Org")
+    add_two_sources(core, first)
+    second = create_draft(core, direct_vm, direct_alice, name="Second Org")
+    add_two_sources(core, second)
+    warp(direct_vm, "2030-01-01T00:00:00Z")
+    core.seal_organization(first)
+    core.seal_organization(second)
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_web(r".*second-repo\.example.*", {"status": 200, "body": "Mission evidence 2030"})
+    direct_vm.mock_web(r".*second-site\.example.*", {"status": 200, "body": "Mission evidence 2030"})
+
+    warp(direct_vm, "2030-01-01T00:01:00Z")
+    direct_vm.mock_llm(r"Assess mission continuity", response(1893456060, source_ids=(1, 2)))
+    core.trigger_continuity_review(first)
+
+    direct_vm.clear_mocks()
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_web(r".*second-repo\.example.*", {"status": 200, "body": "Mission evidence 2030"})
+    direct_vm.mock_web(r".*second-site\.example.*", {"status": 200, "body": "Mission evidence 2030"})
+    direct_vm.mock_llm(r"Assess mission continuity", response(1893456060, source_ids=(3, 4)))
+    core.trigger_continuity_review(second)
+
+    warp(direct_vm, "2030-01-01T00:02:00Z")
+    direct_vm.clear_mocks()
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_llm(r"Assess mission continuity", response(1893456120, source_ids=(1, 2)))
+    core.trigger_continuity_review(first)
+
+    first_state = json.loads(core.get_organization(first))
+    second_state = json.loads(core.get_organization(second))
+    assert first_state["review_count"] == 2
+    assert first_state["latest_review_id"] == 3
+    assert second_state["review_count"] == 1
+    assert second_state["latest_review_id"] == 2
+    assert json.loads(core.get_review(first_state["latest_review_id"]))["organization_id"] == first
+    assert json.loads(core.get_review(second_state["latest_review_id"]))["organization_id"] == second
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:password@example.com/source",
+        "https://example.com/source?token=secret",
+        "https://localhost/source",
+        "https://10.0.0.1/source",
+        "https://[::1]/source",
+    ],
+)
+def test_source_urls_reject_credentials_secrets_and_private_hosts(direct_vm, direct_deploy, direct_alice, url):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    org_id = create_draft(core, direct_vm, direct_alice)
+    with direct_vm.expect_revert():
+        core.add_source(org_id, "Hostile", url, "repo")
+
+
+def test_source_url_and_record_bounds_are_enforced(direct_vm, direct_deploy, direct_alice):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    with direct_vm.expect_revert("invalid mission"):
+        core.create_organization("Aevum Test", "too short", "too short", 60, 120, 3600, 1000, direct_alice, 60)
+    org_id = create_draft(core, direct_vm, direct_alice)
+    with direct_vm.expect_revert("invalid source URL"):
+        core.add_source(org_id, "Repo", "https://" + ("a" * 600) + ".example/source", "repo")
+
+
+def test_validator_rejects_independent_decision_disagreement(direct_vm, direct_deploy, direct_alice):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    org_id = create_draft(core, direct_vm, direct_alice)
+    add_two_sources(core, org_id)
+    warp(direct_vm, "2030-01-01T00:00:00Z")
+    core.seal_organization(org_id)
+    warp(direct_vm, "2030-01-01T00:02:00Z")
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_llm(r"Assess mission continuity", response(1893456120, recent=True))
+    core.trigger_continuity_review(org_id)
+    direct_vm.clear_mocks()
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_llm(r"Assess mission continuity", response(1893456120, recent=False))
+    assert direct_vm.run_validator() is False
+
+
+def test_bounded_retry_envelope_is_durable_and_does_not_increment_success_count(direct_vm, direct_deploy, direct_alice):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    org_id = create_draft(core, direct_vm, direct_alice)
+    add_two_sources(core, org_id)
+    warp(direct_vm, "2030-01-01T00:00:00Z")
+    core.seal_organization(org_id)
+    warp(direct_vm, "2030-01-01T00:02:00Z")
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_llm(r"Assess mission continuity", json.dumps({"unexpected": True}))
+    core.trigger_continuity_review(org_id)
+    review = json.loads(core.get_review(1))
+    org = json.loads(core.get_organization(org_id))
+    assert review["review_state"] == "RETRYABLE_ERROR"
+    assert review["error_code"] == "LLM_MALFORMED"
+    assert org["review_count"] == 0
+    assert org["latest_review_id"] == 1
+    assert org["status"] == "REVIEW_DUE"
+
+
+def test_successful_retry_after_bounded_failure_is_a_new_finalized_review(direct_vm, direct_deploy, direct_alice):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    org_id = create_draft(core, direct_vm, direct_alice)
+    add_two_sources(core, org_id)
+    warp(direct_vm, "2030-01-01T00:00:00Z")
+    core.seal_organization(org_id)
+    warp(direct_vm, "2030-01-01T00:02:00Z")
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_llm(r"Assess mission continuity", json.dumps({"unexpected": True}))
+    core.trigger_continuity_review(org_id)
+    direct_vm.clear_mocks()
+    configure_source_web(direct_vm, "Mission evidence 2030")
+    direct_vm.mock_llm(r"Assess mission continuity", response(1893456120, recent=True))
+    warp(direct_vm, "2030-01-01T00:03:00Z")
+    core.trigger_continuity_review(org_id)
+    org = json.loads(core.get_organization(org_id))
+    assert org["review_count"] == 1
+    assert org["latest_review_id"] == 2
+    assert json.loads(core.get_review(2))["review_state"] == "FINALIZED"
+
+
+def test_interrupted_review_recovery_is_delayed_and_durable(direct_vm, direct_deploy, direct_alice):
+    core = deploy_core(direct_deploy, direct_vm, direct_alice)
+    org_id = create_draft(core, direct_vm, direct_alice)
+    add_two_sources(core, org_id)
+    warp(direct_vm, "2030-01-01T00:00:00Z")
+    core.seal_organization(org_id)
+    state = json.loads(core.get_organization(org_id))
+    state["status"] = "REVIEWING"
+    state["pending_review_id"] = 77
+    state["review_started_at"] = 1893456000
+    core.organizations[org_id] = json.dumps(state, sort_keys=True, separators=(",", ":"))
+    warp(direct_vm, "2030-01-01T00:04:59Z")
+    with direct_vm.expect_revert("recovery delay"):
+        core.recover_review(org_id)
+    warp(direct_vm, "2030-01-01T00:05:00Z")
+    core.recover_review(org_id)
+    recovered = json.loads(core.get_organization(org_id))
+    receipt = json.loads(core.get_review(77))
+    assert recovered["status"] == "REVIEW_DUE"
+    assert recovered["pending_review_id"] == 0
+    assert receipt["error_code"] == "INTERRUPTED_REVIEW_RECOVERED"
+    with direct_vm.expect_revert("no interrupted review"):
+        core.recover_review(org_id)

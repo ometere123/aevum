@@ -18,6 +18,17 @@ describe("finalized write confirmation",()=>{
     const reread=vi.fn();const result=await confirmWrite(client({statusName:"ACCEPTED",txExecutionResultName:"SUCCESS"}),hash,reread);
     expect(result.stage).toBe("CONSENSUS_FAILURE");expect(reread).not.toHaveBeenCalled();
   });
+  it("reads nested Studionet txExecutionResult receipts",async()=>{
+    const reread=vi.fn().mockResolvedValue(undefined);
+    const result=await confirmWrite(client({statusName:"FINALIZED",txExecutionResult:{name:"SUCCESS"}}),hash,reread);
+    expect(result.stage).toBe("EXECUTION_CONFIRMED");
+    expect(reread).toHaveBeenCalledOnce();
+  });
+  it("preserves a hash and distinguishes protocol undetermined",async()=>{
+    const result=await confirmWrite(client({statusName:"UNDETERMINED",txExecutionResult:{name:"UNDETERMINED"}}),hash,vi.fn());
+    expect(result.stage).toBe("CONSENSUS_UNDETERMINED");
+    expect(result.hash).toBe(hash);
+  });
   it("preserves hash when RPC finality polling fails",async()=>{
     const failing={waitForFinalization:vi.fn().mockRejectedValue(new Error("rpc down"))} as never;
     const result=await confirmWrite(failing,hash,async()=>{});expect(result.stage).toBe("RPC_UNAVAILABLE");expect(result.hash).toBe(hash);

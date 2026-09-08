@@ -1,8 +1,8 @@
 import { createClient } from "genlayer-js";
-import { studionet } from "genlayer-js/chains";
+import { localnet, studionet } from "genlayer-js/chains";
 import { env, assertConfigured } from "../config";
 
-const client=createClient({chain:studionet});
+const client=createClient({chain:env.network==="localnet"?localnet:studionet});
 const core=()=>env.coreAddress as `0x${string}`;
 const vault=()=>env.vaultAddress as `0x${string}`;
 async function read(address:`0x${string}`,functionName:string,args:unknown[]=[]){
@@ -10,6 +10,7 @@ async function read(address:`0x${string}`,functionName:string,args:unknown[]=[])
   return client.readContract({address,functionName,args,transactionHashVariant:"latest-final"} as never) as Promise<unknown>;
 }
 const json=(value:unknown)=>JSON.parse(String(value));
+const vaultJson=(value:unknown)=>JSON.parse(String(value), (key, item) => ["funded","released","recovered","balance","epoch_spent"].includes(key) && typeof item === "number" ? String(item) : item);
 export async function readOrganization(id:string){return json(await read(core(),"get_organization",[BigInt(id)]));}
 export async function readOrganizationCount(){return Number(await read(core(),"get_organization_count"));}
 export async function readOrganizations(){
@@ -23,7 +24,7 @@ export async function readReview(id:string){return json(await read(core(),"get_r
 export async function readCandidates(id:string,count:number){
   return Promise.all(Array.from({length:count},(_,i)=>read(core(),"get_candidate_by_index",[BigInt(id),BigInt(i)]).then(json)));
 }
-export async function readVault(id:string){return json(await read(vault(),"get_vault",[BigInt(id)]));}
+export async function readVault(id:string){return vaultJson(await read(vault(),"get_vault",[BigInt(id)]));}
 export async function readAllowance(id:string){return BigInt(String(await read(vault(),"remaining_epoch_allowance",[BigInt(id)])));}
 export async function readSpendingEnabled(id:string){return Boolean(await read(core(),"is_spending_enabled",[BigInt(id)]));}
 export async function readReviewDue(id:string){return Boolean(await read(core(),"is_review_due",[BigInt(id)]));}
