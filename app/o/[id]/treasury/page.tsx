@@ -11,7 +11,7 @@ export default function Treasury(){
   const id=usePathname().split("/")[2];
   const [org,setOrg]=useState<CanonicalRecord>();const [vault,setVault]=useState<CanonicalRecord>();const [allowance,setAllowance]=useState<bigint>();const [canRecover,setCanRecover]=useState(false);const [binding,setBinding]=useState<{coreVault:string,vaultCore:string}>();const [state,setState]=useState("READING CORE / VAULT");
   const reread=async()=>{const [o,v,a,r,b]=await Promise.all([readOrganization(id),readVault(id),readAllowance(id),readCanRecoverTreasury(id),readBindings()]);setOrg(o);setVault(v);setAllowance(a);setCanRecover(r);setBinding(b);setState("CANONICAL READ")};
-  useEffect(()=>{reread().catch(e=>setState(e instanceof Error?e.message:"RPC_FAILURE"))},[id]);
+  useEffect(()=>{queueMicrotask(()=>{void reread().catch(e=>setState(e instanceof Error?e.message:"RPC_FAILURE"))})},[id]);
   const metrics:[string,unknown][]=[
     ["FUNDED",vault?.funded],
     ["RELEASED",vault?.released],
