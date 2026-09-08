@@ -1,6 +1,6 @@
 {
-  "deploymentStatus": "superseded-by-hardening-branch-awaiting-fresh-deployment",
-  "note": "The historical Studionet pair below was valid evidence for the pre-hardening source, but contracts/aevum_core.py and contracts/aevum_vault.py have since changed materially on phase1-5-hardening. These addresses MUST NOT be configured as the final deployment for the hardened repository. A fresh matching Core/Vault pair, funded lifecycle, public frontend, and browser-wallet proof are still required before this manifest can become canonical again.",
+  "deploymentStatus": "fresh-pair-deployed-funded-lifecycle-pending",
+  "note": "The fresh pair below matches the hardened contract sources and has verified Studionet finality, successful execution, and Core/Vault binding. Funded lifecycle, public frontend deployment, and browser-wallet evidence remain separate gates and are not claimed here.",
   "network": {
     "name": "studionet",
     "chainId": 61999,
@@ -8,14 +8,20 @@
     "explorer": "https://explorer-studio.genlayer.com"
   },
   "requiredCanonicalDeployment": {
-    "gitCommit": null,
-    "coreAddress": null,
-    "coreSourceSha256": null,
-    "coreDeploymentTx": null,
-    "vaultAddress": null,
-    "vaultSourceSha256": null,
-    "vaultDeploymentTx": null,
-    "bindingTx": null,
+    "gitCommit": "19d8325894dad64901cc08a82912ddbfb1cc2ead",
+    "coreAddress": "0xF0b176855127BcE398E6616DE55efA84929D0e54",
+    "coreSourceSha256": "1b0f5bad785efbf0ece8f3bc4e32698dc2e35b089541b49bd9c5ed75c71a5851",
+    "coreSourceBytes": 48223,
+    "coreDeploymentTx": "0x5aaf92317a4d108a664748a0d3cacbb2968d1c94fd8b9d415af04eb397c588cd",
+    "vaultAddress": "0xfEB48492C1b7281223Ea472C16015A541821F10B",
+    "vaultSourceSha256": "341f69b846a9e6a6e9653ccf5c491f2f37b0d8ec226290d35cc63fdc1b6da5bb",
+    "vaultSourceBytes": 8998,
+    "vaultDeploymentTx": "0x0a4f2352e507262087b2ca4084445385dfa16745c6819774d77121d3f3b158fe",
+    "bindingTx": "0xa0e86d376b185d46beb214f602d94920992c943d83b452b6d73fe8eeece1d279",
+    "bindingReadback": {
+      "coreVault": "0xfEB48492C1b7281223Ea472C16015A541821F10B",
+      "vaultCore": "0xF0b176855127BcE398E6616DE55efA84929D0e54"
+    },
     "publicFrontendUrl": null,
     "fundedLifecycleComplete": false,
     "browserWalletEvidenceComplete": false

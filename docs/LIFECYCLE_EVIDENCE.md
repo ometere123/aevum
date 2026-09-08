@@ -10,7 +10,12 @@ This file is an evidence boundary, not a claim of completion.
 
 ## Live deployment boundary
 
-No final Aevum Core/Vault deployment is recorded by this repository state. `docs/deployment-manifest.json` therefore intentionally has null canonical deployment fields and marks its historical pair as superseded. No public frontend, native GEN movement, steward rotation, dormant recovery, closure, or browser-wallet transaction should be described as live-proven until hashes, finality, execution results, and canonical readbacks are added here.
+The fresh hardened pair is deployed on Studionet and is recorded in `docs/deployment-manifest.json`. Both deployment transactions are FINALIZED with successful execution, and the one-way Core → Vault binding transaction is FINALIZED with successful execution. The canonical readbacks are:
+
+- Core `get_vault_address()` → `0xfEB48492C1b7281223Ea472C16015A541821F10B`
+- Vault `get_core_address()` → `0xF0b176855127BcE398E6616DE55efA84929D0e54`
+
+The funded organization lifecycle is still pending. No native GEN movement, steward rotation, dormant recovery, closure, or browser-wallet transaction is claimed until each has a transaction hash, finality, execution result, and canonical readback.
 
 ## Required live evidence ledger
 
@@ -18,9 +23,9 @@ When the final source is frozen, record one row per transaction with:
 
 | Step | Transaction | Finality | Execution | Canonical readback |
 | --- | --- | --- | --- | --- |
-| Core deployment | pending | pending | pending | pending |
-| Vault deployment | pending | pending | pending | pending |
-| Core → Vault binding | pending | pending | pending | pending |
+| Core deployment | `0x5aaf92317a4d108a664748a0d3cacbb2968d1c94fd8b9d415af04eb397c588cd` | FINALIZED | SUCCESS | `0xF0b176855127BcE398E6616DE55efA84929D0e54` |
+| Vault deployment | `0x0a4f2352e507262087b2ca4084445385dfa16745c6819774d77121d3f3b158fe` | FINALIZED | SUCCESS | `0xfEB48492C1b7281223Ea472C16015A541821F10B` |
+| Core → Vault binding | `0xa0e86d376b185d46beb214f602d94920992c943d83b452b6d73fe8eeece1d279` | FINALIZED | SUCCESS | both binding reads match |
 | Organization creation | pending | pending | pending | pending |
 | Source registration | pending | pending | pending | pending |
 | Sealing | pending | pending | pending | pending |
