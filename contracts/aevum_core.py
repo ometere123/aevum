@@ -909,7 +909,8 @@ class AevumCore(gl.Contract):
                 "recovered_at": now,
             },
         )
-        org["status"] = ORG_REVIEW_DUE
+        org["status"] = prior_status
+        org["spending_enabled"] = prior_spending
         org["pending_review_id"] = 0
         org["review_started_at"] = 0
         self._write(self.organizations, org_id, org)

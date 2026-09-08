@@ -406,7 +406,7 @@ def test_interrupted_review_recovery_is_delayed_and_durable(direct_vm, direct_de
     core.recover_review(org_id)
     recovered = json.loads(core.get_organization(org_id))
     receipt = json.loads(core.get_review(77))
-    assert recovered["status"] == "REVIEW_DUE"
+    assert recovered["status"] == "ACTIVE"
     assert recovered["pending_review_id"] == 0
     assert recovered["latest_review_id"] == 77
     assert receipt["error_code"] == "INTERRUPTED_REVIEW_RECOVERED"
@@ -451,4 +451,4 @@ def test_recovery_receipt_preserves_pre_review_state(
     assert recovered["pending_review_id"] == 0
     assert recovered["latest_review_id"] == 91
     assert recovered["dormant_since"] == before_dormant_since
-    assert recovered["status"] == "REVIEW_DUE"
+    assert recovered["status"] == prior_status

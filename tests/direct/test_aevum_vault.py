@@ -148,3 +148,11 @@ def test_maximum_recovery_is_conserved_and_replay_safe(direct_vm, direct_deploy,
     assert int(state["balance"]) == 0
     with direct_vm.expect_revert("treasury already recovered"):
         vault.recover_dormant(1)
+
+
+def test_dormant_recovery_state_does_not_make_vault_depositable(direct_vm, direct_deploy, direct_alice):
+    vault = deploy_vault(direct_vm, direct_deploy, direct_alice, status="DORMANT", can_recover=True)
+    direct_vm.sender = direct_alice
+    direct_vm.value = 1
+    with direct_vm.expect_revert("organization is not depositable"):
+        vault.deposit(1)
