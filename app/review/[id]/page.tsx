@@ -78,7 +78,7 @@ export default function ReviewReceipt({ params }: { params: Promise<{ id: string
         {message && <p className="mono mt-4 break-words text-[10px] text-[#B8FF5A]">{message}</p>}
       </div>
       <div className="border border-[#E9E1CF22] p-7"><p className="mono text-[10px] text-[#777269]">CANONICAL ORGANIZATION STATE</p><p className="mt-4 text-sm">Organization {organizationId || "—"} / status {String(organization?.status ?? "—")} / pending review {String(organization?.pending_review_id ?? "—")} / latest review {String(organization?.latest_review_id ?? review.review_id ?? reviewId)}</p></div>
-      <CoreLifecycleActions orgId={organizationId} status={String(organization?.status ?? "")} pendingReviewId={Number(organization?.pending_review_id ?? 0)} />
+      <CoreLifecycleActions orgId={organizationId} status={String(organization?.status ?? "")} pendingReviewId={Number(organization?.pending_review_id ?? 0)} onChanged={() => load()} />
       <div className="border border-[#E9E1CF22] p-7"><p className="mono text-[10px] text-[#777269]">SOURCE SUPPORT</p>{(review.source_support||[]).map((source:{source_id:number;available:boolean;supports_recent_activity:boolean;supports_mission_alignment:boolean;excerpt:string})=><div key={source.source_id} className="mt-4 border-b border-[#E9E1CF11] pb-3 text-sm"><span className="text-[#B8FF5A]">Source {source.source_id}</span> / {source.available?"available":"unavailable"} / recent {String(source.supports_recent_activity)} / mission {String(source.supports_mission_alignment)}<p className="mt-1 text-xs text-[#777269]">{source.excerpt}</p></div>)}</div>
     </div>}
   </div>;
