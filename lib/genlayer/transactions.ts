@@ -1,5 +1,6 @@
 import { env } from "../config";
 import { createClient } from "genlayer-js";
+export { stableJson, toJsonSafe, normalizeSdkValue, writeContractSafely } from "./serialization";
 
 export type TxStage=
   |"AWAITING_SIGNATURE"

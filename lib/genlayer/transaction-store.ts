@@ -15,8 +15,10 @@ const read = (): StoredTransaction[] => {
   if (typeof window === "undefined") return [];
   try { return JSON.parse(localStorage.getItem(KEY) ?? "[]") as StoredTransaction[]; } catch { return []; }
 };
-const write = (items: StoredTransaction[]) => { if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(items)); };
-const fingerprint = (args: unknown[]) => JSON.stringify(args, (_, value) => typeof value === "bigint" ? `${value}n` : value);
+import { stableJson } from "./serialization";
+
+const write = (items: StoredTransaction[]) => { if (typeof window !== "undefined") localStorage.setItem(KEY, stableJson(items)); };
+const fingerprint = (args: unknown[]) => stableJson(args);
 
 export function rememberSubmittedTransaction(input: Omit<StoredTransaction, "argsFingerprint" | "submittedAt" | "stage"> & { args: unknown[] }) {
   const item: StoredTransaction = { ...input, argsFingerprint: fingerprint(input.args), submittedAt: Date.now(), stage: "SUBMITTED" };

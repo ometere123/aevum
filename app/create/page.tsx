@@ -9,6 +9,7 @@ import {env,assertConfigured} from "../../lib/config";
 import {parseGen} from "../../lib/genlayer/gen";
 import {readOrganization,readOrganizations} from "../../lib/genlayer/reads";
 import {rememberSubmittedTransaction,updateStoredTransaction} from "../../lib/genlayer/transaction-store";
+import {writeContractSafely} from "../../lib/genlayer/serialization";
 
 export default function Create(){
   const {address,ensureWriteReady}=useWallet();
@@ -50,7 +51,7 @@ export default function Create(){
           parsed.data.recoveryRecipient,
           BigInt(parsed.data.closureDelay),
         ];
-      const hash=await session.client.writeContract({
+      const hash=await writeContractSafely(session.client,{
         address:env.coreAddress as `0x${string}`,
         functionName:"create_organization",
         args,
@@ -84,7 +85,7 @@ export default function Create(){
       <label><span className="mono text-[10px] text-[#777269]">EPOCH RELEASE CAP (GEN)</span><input required value={form.releaseCapGen} onChange={e=>setForm({...form,releaseCapGen:e.target.value})} inputMode="decimal" className={input}/></label>
       <label><span className="mono text-[10px] text-[#777269]">RECOVERY RECIPIENT</span><input value={form.recoveryRecipient} onChange={e=>setForm({...form,recoveryRecipient:e.target.value})} placeholder={address??"0x..."} className={input}/></label>
       <label><span className="mono text-[10px] text-[#777269]">DORMANT CLOSURE DELAY (SEC)</span><input type="number" required value={form.closureDelay} onChange={e=>setForm({...form,closureDelay:Number(e.target.value)})} className={input}/></label>
-      <div className="md:col-span-2 border-t border-[#E9E1CF22] pt-5"><p className="mono break-words text-[10px] text-[#B8784E]">{message}</p>{tx&&<a className="mono mt-2 block text-[10px] underline" href={explorerTx(tx)} target="_blank" rel="noreferrer">View transaction on Explorer ↗</a>}{createdId&&<Link className="mt-4 inline-block text-sm underline" href={`/o/${createdId}`}>Open organization {createdId} →</Link>}<button disabled={busy} className="mt-5 block rounded-full bg-[#B8FF5A] px-6 py-3 text-sm font-semibold text-[#0B0B0A] disabled:opacity-40">Create draft charter</button></div>
+      <div className="md:col-span-2 border-t border-[#E9E1CF22] pt-5"><p className="mono break-words text-[10px] text-[#B8784E]">{message}</p>{tx&&<a className="mono mt-2 block text-[10px] underline" href={explorerTx(tx)} target="_blank" rel="noreferrer">View transaction on Explorer ↗</a>}{createdId&&<Link className="mt-4 inline-block text-sm underline" href={`/o/${createdId}`}>Open organization {createdId} →</Link>}<button disabled={busy||!address} className="mt-5 block rounded-full bg-[#B8FF5A] px-6 py-3 text-sm font-semibold text-[#0B0B0A] disabled:opacity-40">{address?"Create draft charter":"Connect wallet to create charter"}</button></div>
     </form>
   </div>;
 }
