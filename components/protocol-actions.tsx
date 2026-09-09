@@ -11,6 +11,7 @@ import {parseGen,formatGen} from "../lib/genlayer/gen";
 import {readAllowance,readCandidates,readOrganization,readReleaseUsed,readSources,readVault} from "../lib/genlayer/reads";
 import {rememberSubmittedTransaction,updateStoredTransaction,updateStoredTransactionDetails} from "../lib/genlayer/transaction-store";
 import {writeContractSafely} from "../lib/genlayer/serialization";
+import {assertClosedOrganizationReadback, assertRecoveredReviewReadback} from "../lib/genlayer/core-actions";
 
 type CalldataEncodable = string | bigint;
 
@@ -63,6 +64,82 @@ export function ProtocolActions({orgId}:{orgId:string}){
       <button disabled={busy||!address} onClick={seal} className="rounded-full border border-[#E9E1CF44] px-4 py-3 text-xs disabled:opacity-40">Seal charter</button>
     </div>
     <p className="mono mt-4 break-words text-[10px] text-[#B8FF5A]">{state}</p><TxProof hash={tx}/>
+  </div>;
+}
+
+type CoreLifecycleActionProps = {
+  orgId: string;
+  status?: string;
+  pendingReviewId?: number;
+  onChanged?: () => Promise<void>;
+};
+
+/** Wallet-backed recovery/closure actions. Both writes verify the exact
+ * canonical transition after the Studionet transaction is finalized. */
+export function CoreLifecycleActions({orgId, status, pendingReviewId = 0, onChanged}: CoreLifecycleActionProps) {
+  const {address, ensureWriteReady} = useWallet();
+  const [state, setState] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const write = async (method: "recover_review" | "close_organization", verify: (before: Record<string, unknown>) => Promise<void>) => {
+    if (busy || !address) return;
+    const actionKey = `core:${orgId}:${method}`;
+    try {
+      assertConfigured();
+      const before = await readOrganization(orgId);
+      setBusy(true);
+      setState("AWAITING_SIGNATURE");
+      const session = await ensureWriteReady();
+      const args = [BigInt(orgId)];
+      const hash = await writeContractSafely(session.client, {
+        address: env.coreAddress as `0x${string}`,
+        functionName: method,
+        args,
+        value: 0n,
+      });
+      rememberSubmittedTransaction({
+        actionKey,
+        account: session.address,
+        chainId: "0xf22f",
+        contract: env.coreAddress,
+        method,
+        args,
+        hash,
+        organizationId: orgId,
+        route: `/o/${orgId}`,
+      });
+      setState(`SUBMITTED ${hash}`);
+      const final = await confirmWrite(session.client, hash, async () => {
+        await verify(before);
+        await onChanged?.();
+      });
+      updateStoredTransaction(actionKey, session.address, final.stage, final.error);
+      setState(final.hash ? `${final.stage} ${final.hash}${final.error ? ` / ${final.error}` : ""}` : final.stage);
+    } catch (error) {
+      const classified = classifyWalletError(error);
+      setState(`${classified.stage}: ${classified.error ?? "write failed"}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const recover = () => write("recover_review", async (before) => assertRecoveredReviewReadback(before, await readOrganization(orgId)));
+
+  const close = () => write("close_organization", async () => assertClosedOrganizationReadback(await readOrganization(orgId)));
+
+  const recoveryAvailable = status === "REVIEWING" && pendingReviewId > 0;
+  const closeAvailable = status === "DORMANT";
+  if (!recoveryAvailable && !closeAvailable && !state) return null;
+
+  return <div className="mt-8 border-t border-[#E9E1CF22] pt-6">
+    <p className="mono text-[10px] text-[#777269]">RECOVERY / CLOSURE ACTIONS</p>
+    <div className="mt-4 flex flex-wrap gap-3">
+      {recoveryAvailable && <button aria-label="recover interrupted review" disabled={busy || !address} onClick={recover} className="rounded-full border border-[#B8784E] px-5 py-3 text-xs text-[#B8784E] disabled:opacity-40">{busy ? "Recovering…" : "Recover interrupted review"}</button>}
+      {closeAvailable && <button aria-label="close organization" disabled={busy || !address} onClick={close} className="rounded-full border border-[#E9E1CF44] px-5 py-3 text-xs disabled:opacity-40">{busy ? "Closing…" : "Close organization"}</button>}
+    </div>
+    {recoveryAvailable && <p className="mt-3 text-xs text-[#777269]">This clears a review that has remained pending beyond the sealed recovery delay and restores its exact prior state.</p>}
+    {closeAvailable && <p className="mt-3 text-xs text-[#777269]">Closure remains subject to the canonical delay, withdrawn candidates, and zero Vault balance.</p>}
+    {state && <p className="mono mt-4 break-words text-[10px] text-[#B8FF5A]">{state}</p>}
   </div>;
 }
 

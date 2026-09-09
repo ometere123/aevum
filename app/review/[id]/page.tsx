@@ -7,6 +7,7 @@ import { classifyWalletError, confirmWrite, explorerTx } from "../../../lib/genl
 import { writeContractSafely } from "../../../lib/genlayer/serialization";
 import { env } from "../../../lib/config";
 import { allStoredTransactions, rememberSubmittedTransaction, updateStoredTransaction } from "../../../lib/genlayer/transaction-store";
+import { CoreLifecycleActions } from "../../../components/protocol-actions";
 
 type ReviewRecord = Record<string, any>;
 
@@ -73,10 +74,11 @@ export default function ReviewReceipt({ params }: { params: Promise<{ id: string
         <p className="mono mt-3 text-xs">{String(review.error_code ?? review.review_state ?? "—")} / transition {String(review.transition_applied ?? false)}</p>
         <p className="mt-5 text-sm text-[#777269]">{explanation}</p>
         {hash && <a className="mono mt-4 block break-all text-xs underline" href={explorerTx(hash)} target="_blank" rel="noreferrer">Transaction {hash} ↗</a>}
-        {retryable && <><p className="mt-4 text-xs text-[#B8784E]">No review outcome was committed. The organization remains governed by its canonical pre-review state.</p><button disabled={busy||!address||!organizationId} onClick={retry} className="mt-6 rounded-full bg-[#B8FF5A] px-5 py-3 text-xs font-semibold text-[#0B0B0A] disabled:opacity-40">{busy ? "Retry pending…" : address ? "Retry review" : "Connect wallet to retry"}</button></>}
+        {retryable && <><p className="mt-4 text-xs text-[#B8784E]">No review outcome was committed. The organization remains governed by its canonical pre-review state.</p>{organization?.status !== "REVIEWING" && <button disabled={busy||!address||!organizationId} onClick={retry} className="mt-6 rounded-full bg-[#B8FF5A] px-5 py-3 text-xs font-semibold text-[#0B0B0A] disabled:opacity-40">{busy ? "Retry pending…" : address ? "Retry review" : "Connect wallet to retry"}</button>}{organization?.status === "REVIEWING" && <p className="mt-6 text-xs text-[#777269]">This organization is still REVIEWING. Recover the interrupted review before starting another attempt.</p>}</>}
         {message && <p className="mono mt-4 break-words text-[10px] text-[#B8FF5A]">{message}</p>}
       </div>
       <div className="border border-[#E9E1CF22] p-7"><p className="mono text-[10px] text-[#777269]">CANONICAL ORGANIZATION STATE</p><p className="mt-4 text-sm">Organization {organizationId || "—"} / status {String(organization?.status ?? "—")} / pending review {String(organization?.pending_review_id ?? "—")} / latest review {String(organization?.latest_review_id ?? review.review_id ?? reviewId)}</p></div>
+      <CoreLifecycleActions orgId={organizationId} status={String(organization?.status ?? "")} pendingReviewId={Number(organization?.pending_review_id ?? 0)} />
       <div className="border border-[#E9E1CF22] p-7"><p className="mono text-[10px] text-[#777269]">SOURCE SUPPORT</p>{(review.source_support||[]).map((source:{source_id:number;available:boolean;supports_recent_activity:boolean;supports_mission_alignment:boolean;excerpt:string})=><div key={source.source_id} className="mt-4 border-b border-[#E9E1CF11] pb-3 text-sm"><span className="text-[#B8FF5A]">Source {source.source_id}</span> / {source.available?"available":"unavailable"} / recent {String(source.supports_recent_activity)} / mission {String(source.supports_mission_alignment)}<p className="mt-1 text-xs text-[#777269]">{source.excerpt}</p></div>)}</div>
     </div>}
   </div>;
