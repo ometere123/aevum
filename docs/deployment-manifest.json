@@ -1,6 +1,6 @@
 {
-  "deploymentStatus": "fresh-pair-deployed-funded-lifecycle-pending",
-  "note": "The fresh pair below matches the hardened contract sources and has verified Studionet finality, successful execution, and Core/Vault binding. The production frontend is deployed from the canonical-address correction commit. Funded lifecycle, public browser-wallet evidence, and native transfer evidence remain incomplete and are not claimed here.",
+  "deploymentStatus": "fresh-pair-deployed-source-line-ending-parity-pending",
+  "note": "The canonical Studionet pair below is finalized, executed successfully, and Core/Vault binding is verified. Retrieved deployed source has the same normalized content as commit 859d458 but differs byte-for-byte because the deployed payload contains CRLF line endings while Git stores LF. This is recorded explicitly; byte-for-byte source parity is not claimed. Funded lifecycle, public browser-wallet evidence, and native transfer evidence remain incomplete and are not claimed here.",
   "network": {
     "name": "studionet",
     "chainId": 61999,
@@ -8,14 +8,25 @@
     "explorer": "https://explorer-studio.genlayer.com"
   },
   "requiredCanonicalDeployment": {
-    "gitCommit": "08fbf38138af9972830794344d62986d30cda806",
+    "gitCommit": "859d45835e92eb27a43f3939c11c97e978f80786",
     "coreAddress": "0xF0b176855127BcE398E6616DE55efA84929D0e54",
     "coreSourceSha256": "1b0f5bad785efbf0ece8f3bc4e32698dc2e35b089541b49bd9c5ed75c71a5851",
     "coreSourceBytes": 48223,
+    "coreRepositorySourceSha256": "e2741c567561e7ee2d08739bd0488fed2ea3227b054d561352e1e20ae89f3e76",
+    "coreRepositorySourceBytes": 47431,
     "coreDeploymentTx": "0x5aaf92317a4d108a664748a0d3cacbb2968d1c94fd8b9d415af04eb397c588cd",
     "vaultAddress": "0xfEB48492C1b7281223Ea472C16015A541821F10B",
     "vaultSourceSha256": "341f69b846a9e6a6e9653ccf5c491f2f37b0d8ec226290d35cc63fdc1b6da5bb",
     "vaultSourceBytes": 8998,
+    "vaultRepositorySourceSha256": "9b7f939d734ef8401eadfa814cfbdb24f96d8bba07131528a7dbfc98191612be",
+    "vaultRepositorySourceBytes": 8835,
+    "sourceParity": {
+      "normalizedContentEqual": true,
+      "byteForByteEqual": false,
+      "difference": "line endings only",
+      "coreDeployedCrlfLines": 792,
+      "vaultDeployedCrlfLines": 163
+    },
     "vaultDeploymentTx": "0x0a4f2352e507262087b2ca4084445385dfa16745c6819774d77121d3f3b158fe",
     "bindingTx": "0xa0e86d376b185d46beb214f602d94920992c943d83b452b6d73fe8eeece1d279",
     "bindingReadback": {
