@@ -1,15 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { explorerTx } from "../lib/genlayer/transactions";
-import { allStoredTransactions, type StoredTransaction } from "../lib/genlayer/transaction-store";
+import { allStoredTransactions, TRANSACTION_EVENT, type StoredTransaction } from "../lib/genlayer/transaction-store";
 import { useWallet } from "../lib/genlayer/wallet";
 
 export function TransactionHistory() {
   const { address, chainId } = useWallet();
-  const items = useMemo(() => {
-    if (!address || chainId?.toLowerCase() !== "0xf22f") return [];
-    return allStoredTransactions().filter((item) => item.account.toLowerCase() === address.toLowerCase() && item.chainId.toLowerCase() === "0xf22f").slice(0, 5);
+  const [items, setItems] = useState<StoredTransaction[]>([]);
+  useEffect(() => {
+    const refresh = () => setItems(!address || chainId?.toLowerCase() !== "0xf22f" ? [] : allStoredTransactions().filter((item) => item.account.toLowerCase() === address.toLowerCase() && item.chainId.toLowerCase() === "0xf22f").slice(0, 5));
+    refresh();
+    window.addEventListener(TRANSACTION_EVENT, refresh);
+    return () => window.removeEventListener(TRANSACTION_EVENT, refresh);
   }, [address, chainId]);
   if (!items.length) return null;
   return <aside aria-label="Recent wallet transactions" className="fixed bottom-4 right-4 z-30 hidden w-80 border border-[#E9E1CF44] bg-[#0B0B0Aee] p-4 shadow-[4px_4px_0_#B8784E] md:block">

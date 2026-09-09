@@ -19,13 +19,14 @@ export type StoredTransaction = {
 };
 
 const KEY = "aevum:transactions";
+export const TRANSACTION_EVENT = "aevum:transactions-changed";
 const read = (): StoredTransaction[] => {
   if (typeof window === "undefined") return [];
   try { return JSON.parse(localStorage.getItem(KEY) ?? "[]") as StoredTransaction[]; } catch { return []; }
 };
 import { stableJson } from "./serialization";
 
-const write = (items: StoredTransaction[]) => { if (typeof window !== "undefined") localStorage.setItem(KEY, stableJson(items)); };
+const write = (items: StoredTransaction[]) => { if (typeof window !== "undefined") { localStorage.setItem(KEY, stableJson(items)); window.dispatchEvent(new Event(TRANSACTION_EVENT)); } };
 const fingerprint = (args: unknown[]) => stableJson(args);
 
 export function rememberSubmittedTransaction(input: Omit<StoredTransaction, "argsFingerprint" | "submittedAt" | "stage"> & { args: unknown[] }) {
