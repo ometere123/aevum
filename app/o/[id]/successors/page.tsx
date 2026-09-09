@@ -1,5 +1,7 @@
 import {readCandidates,readOrganization} from "../../../../lib/genlayer/reads";
 import {SuccessorActions} from "../../../../components/successor-actions";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function Successors({params}:{params:Promise<{id:string}>}){
   const {id}=await params;let org;let candidates=[];let error="";

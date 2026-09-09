@@ -35,7 +35,7 @@ export function SuccessorActions({ orgId, candidateId, candidate, active }: { or
         if (!updated || updated.active) throw new Error("STATE_MISMATCH: nomination is still active after finalized withdrawal");
       });
       updateStoredTransaction(actionKey, session.address, final.stage);
-      setState(final.stage === "EXECUTION_CONFIRMED" ? final.stage : `${final.stage}: ${final.error ?? "not confirmed"}`);
+      setState(final.stage === "STATE_CONFIRMED" ? final.stage : `${final.stage}: ${final.error ?? "not confirmed"}`);
     } catch (error) {
       const classified = classifyWalletError(error);
       setState(`${classified.stage}: ${classified.error ?? "withdrawal failed"}`);

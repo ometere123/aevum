@@ -15,6 +15,7 @@ declare global { interface Window { ethereum?: EIP1193Provider } }
 
 const STUDIONET_CHAIN_ID = "0xf22f";
 const STORAGE_KEY = "aevum:address";
+const CHAIN_STORAGE_KEY = "aevum:chainId";
 const getProvider = () => typeof window === "undefined" ? undefined : window.ethereum;
 const isUserRejected = (error: unknown) => (error as { code?: number })?.code === 4001;
 
@@ -44,6 +45,8 @@ type WalletContext = {
   address?: string;
   chainId?: string;
   chainOk: boolean;
+  connecting: boolean;
+  status: "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "WRONG_NETWORK";
   error?: string;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -56,9 +59,10 @@ type WalletContext = {
 const WalletContext = createContext<WalletContext | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [address, setAddress] = useState<string>();
-  const [chainId, setChainId] = useState<string>();
+  const [address, setAddress] = useState<string|undefined>(() => typeof window === "undefined" ? undefined : localStorage.getItem(STORAGE_KEY) || undefined);
+  const [chainId, setChainId] = useState<string|undefined>(() => typeof window === "undefined" ? undefined : localStorage.getItem(CHAIN_STORAGE_KEY) || undefined);
   const [chainOk, setChainOk] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string>();
   const sync = useCallback(async () => {
     const current = getProvider();
@@ -69,24 +73,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (state.address) { setAddress(state.address); localStorage.setItem(STORAGE_KEY, state.address); }
       else if (saved) { localStorage.removeItem(STORAGE_KEY); setAddress(undefined); }
       else setAddress(undefined);
-      setChainId(state.chainId); setChainOk(state.chainOk);
+      setChainId(state.chainId); localStorage.setItem(CHAIN_STORAGE_KEY,state.chainId); setChainOk(state.chainOk);
     } catch (e) { setError(e instanceof Error ? e.message : "Wallet state unavailable"); }
   }, []);
   useEffect(() => {
     queueMicrotask(() => { void sync(); });
     const current = getProvider(); if (!current?.on) return;
     const accountsChanged = () => { void sync(); }; const chainChanged = () => { void sync(); };
-    const disconnected = () => { setAddress(undefined); setChainId(undefined); setChainOk(false); localStorage.removeItem(STORAGE_KEY); };
+    const disconnected = () => { setAddress(undefined); setChainId(undefined); setChainOk(false); localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(CHAIN_STORAGE_KEY); };
     current.on("accountsChanged", accountsChanged); current.on("chainChanged", chainChanged); current.on("disconnect", disconnected);
     return () => { current.removeListener?.("accountsChanged", accountsChanged); current.removeListener?.("chainChanged", chainChanged); current.removeListener?.("disconnect", disconnected); };
   }, [sync]);
   const connect = async () => {
+    if(connecting)return;
+    setConnecting(true);
     try {
       setError(undefined); const current = getProvider(); if (!current) throw new Error("No browser wallet provider found.");
       const accounts = await current.request({ method: "eth_requestAccounts" }) as string[]; if (!accounts[0]) throw new Error("Wallet returned no account.");
-      setAddress(accounts[0]); localStorage.setItem(STORAGE_KEY, accounts[0]); const state = await readProviderState(current); setChainId(state.chainId); setChainOk(state.chainOk);
-      if (!state.chainOk) { await ensureStudionet(current); await sync(); }
+      setAddress(accounts[0]); localStorage.setItem(STORAGE_KEY, accounts[0]); const state = await readProviderState(current); setChainId(state.chainId); localStorage.setItem(CHAIN_STORAGE_KEY,state.chainId); setChainOk(state.chainOk);
+      if (!state.chainOk) await ensureStudionet(current);
+      await sync();
     } catch (e) { setError(e instanceof Error ? e.message : (isUserRejected(e) ? "Wallet connection rejected." : "Wallet connection failed")); }
+    finally { setConnecting(false); }
   };
   const switchNetwork = async () => { try { setError(undefined); const current = getProvider(); if (!current) throw new Error("No browser wallet provider found."); await ensureStudionet(current); await sync(); } catch (e) { setError(e instanceof Error ? e.message : "Network switch failed"); await sync(); } };
   const ensureWriteReady = async () => {
@@ -97,8 +105,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return { client: createClient({ chain: studionet, account: verified.address as `0x${string}`, provider: current as never }), provider: current, address: verified.address as string };
   };
   const writeClient = useMemo(() => address && chainOk && getProvider() ? createClient({ chain: studionet, account: address as `0x${string}`, provider: getProvider() as never }) : undefined, [address, chainOk]);
-  const disconnect = () => { setAddress(undefined); setChainId(undefined); setChainOk(false); setError(undefined); localStorage.removeItem(STORAGE_KEY); };
-  const value: WalletContext = { address, chainId, chainOk, error, connect, disconnect, switchNetwork, ensureWriteReady, readClient: createClient({ chain: studionet }), writeClient };
+  const disconnect = () => { setAddress(undefined); setChainId(undefined); setChainOk(false); setError(undefined); localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(CHAIN_STORAGE_KEY); };
+  const status = connecting ? "CONNECTING" : !address ? "DISCONNECTED" : chainOk ? "CONNECTED" : "WRONG_NETWORK";
+  const value: WalletContext = { address, chainId, chainOk, connecting, status, error, connect, disconnect, switchNetwork, ensureWriteReady, readClient: createClient({ chain: studionet }), writeClient };
   return createElement(WalletContext.Provider, { value }, children);
 }
 

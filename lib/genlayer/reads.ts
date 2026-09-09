@@ -5,9 +5,16 @@ import { env, assertConfigured } from "../config";
 const client=createClient({chain:env.network==="localnet"?localnet:studionet});
 const core=()=>env.coreAddress as `0x${string}`;
 const vault=()=>env.vaultAddress as `0x${string}`;
+const transientReadError=(error:unknown)=>/rpc|fetch|network|timeout|timed out|temporar|503|502|504/i.test(error instanceof Error?error.message:String(error));
+const pause=(ms:number)=>new Promise((resolve)=>setTimeout(resolve,ms));
 async function read(address:`0x${string}`,functionName:string,args:unknown[]=[]){
   assertConfigured();
-  return client.readContract({address,functionName,args,transactionHashVariant:"latest-final"} as never) as Promise<unknown>;
+  let last:unknown;
+  for(let attempt=0;attempt<3;attempt++){
+    try{return await client.readContract({address,functionName,args,transactionHashVariant:"latest-final"} as never) as unknown;
+    }catch(error){last=error;if(!transientReadError(error)||attempt===2)throw error;await pause(150*(attempt+1));}
+  }
+  throw last;
 }
 function parseRead(value:unknown):unknown {
   if (typeof value !== "string") return value;

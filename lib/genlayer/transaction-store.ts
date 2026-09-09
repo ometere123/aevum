@@ -8,6 +8,14 @@ export type StoredTransaction = {
   hash: string;
   submittedAt: number;
   stage: string;
+  route?: string;
+  organizationId?: string;
+  finalResult?: string;
+  error?: string;
+  explorerUrl?: string;
+  childHash?: string;
+  childRecipient?: string;
+  childValueWei?: string;
 };
 
 const KEY = "aevum:transactions";
@@ -27,9 +35,11 @@ export function rememberSubmittedTransaction(input: Omit<StoredTransaction, "arg
 }
 
 export function updateStoredTransaction(actionKey: string, account: string, stage: string) {
-  write(read().map((item) => item.actionKey === actionKey && item.account.toLowerCase() === account.toLowerCase() ? { ...item, stage } : item));
+  write(read().map((item) => item.actionKey === actionKey && item.account.toLowerCase() === account.toLowerCase() ? { ...item, stage, finalResult: stage } : item));
 }
 
+export function allStoredTransactions(): StoredTransaction[] { return read(); }
+
 export function pendingTransactions(account: string, chainId: string) {
-  return read().filter((item) => item.account.toLowerCase() === account.toLowerCase() && item.chainId.toLowerCase() === chainId.toLowerCase() && ["SUBMITTED", "CONSENSUS", "FINALIZED"].includes(item.stage));
+  return read().filter((item) => item.account.toLowerCase() === account.toLowerCase() && item.chainId.toLowerCase() === chainId.toLowerCase() && ["SUBMITTED", "ACCEPTED", "CONSENSUS", "FINALIZED"].includes(item.stage));
 }
