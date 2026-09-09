@@ -16,7 +16,22 @@ describe("finalized write confirmation",()=>{
   });
   it("does not claim success for non-final consensus state",async()=>{
     const reread=vi.fn();const result=await confirmWrite(client({statusName:"ACCEPTED",txExecutionResultName:"SUCCESS"}),hash,reread);
-    expect(result.stage).toBe("CONSENSUS_FAILURE");expect(reread).not.toHaveBeenCalled();
+    expect(result.stage).toBe("CONSENSUS");expect(result.hash).toBe(hash);expect(reread).not.toHaveBeenCalled();
+  });
+  it("accepts the exact Studionet finalized/accepted/GenVM success shape",async()=>{
+    const reread=vi.fn().mockResolvedValue(undefined);
+    const receipt={statusName:"FINALIZED",resultName:"Accepted",txExecutionResultName:"SUCCESS",consensus_data:{final:true,leader_receipt:[{resultName:"Accepted",txExecutionResultName:"SUCCESS"}]}};
+    const result=await confirmWrite(client(receipt),hash,reread);
+    expect(result.stage).toBe("EXECUTION_CONFIRMED");expect(result.hash).toBe(hash);expect(reread).toHaveBeenCalledOnce();
+  });
+  it("classifies finalized accepted rollback as execution failure",async()=>{
+    const reread=vi.fn();
+    const result=await confirmWrite(client({statusName:"FINALIZED",resultName:"Accepted",txExecutionResultName:"ROLLBACK"}),hash,reread);
+    expect(result.stage).toBe("EXECUTION_ERROR");expect(result.hash).toBe(hash);expect(reread).not.toHaveBeenCalled();
+  });
+  it("keeps accepted but not finalized transactions pending",async()=>{
+    const result=await confirmWrite(client({statusName:"ACCEPTED",resultName:"Accepted",txExecutionResultName:"SUCCESS"}),hash,vi.fn());
+    expect(result.stage).toBe("CONSENSUS");expect(result.stage).not.toBe("CONSENSUS_FAILURE");expect(result.hash).toBe(hash);
   });
   it("reads nested Studionet txExecutionResult receipts",async()=>{
     const reread=vi.fn().mockResolvedValue(undefined);

@@ -1,6 +1,6 @@
 import { env } from "../config";
 import { createClient } from "genlayer-js";
-import { executionResultNumberToName, transactionsStatusNumberToName } from "genlayer-js/types";
+import { executionResultNumberToName, transactionResultNumberToName, transactionsStatusNumberToName } from "genlayer-js/types";
 import { toJsonSafe, stableJson } from "./serialization";
 export { stableJson, toJsonSafe, normalizeSdkValue, writeContractSafely } from "./serialization";
 
@@ -83,6 +83,24 @@ function nestedReceiptName(receipt: unknown, keys: string[], map: Record<string,
   return "";
 }
 
+function receiptNames(receipt: unknown, keys: string[], map?: Record<string, string>): string[] {
+  const wanted = new Set(keys);
+  const found: string[] = [];
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    for (const [key, item] of Object.entries(record)) {
+      if (wanted.has(key)) {
+        const name = map ? receiptValueName(item, map) : receiptValueName(item, {});
+        if (name) found.push(name.toUpperCase());
+      }
+      if (item && typeof item === "object") visit(item);
+    }
+  };
+  visit(receipt);
+  return [...new Set(found)];
+}
+
 function safeError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   try { return stableJson(toJsonSafe(error)); } catch { return "Unknown transaction outcome"; }
@@ -104,12 +122,23 @@ export async function confirmWrite(
 
   // Studionet receipts may contain numeric/bigint enum fields, including nested
   // leader receipts. Normalize only for inspection/display; never mutate SDK data.
-  const resultName=(nestedReceiptName(receipt,["txExecutionResultName","txExecutionResult","executionResultName","execution_result"],executionResultNumberToName)||nestedReceiptText(receipt,["resultName","result","name"])).toUpperCase();
-  const statusName=(nestedReceiptName(receipt,["statusName","status","decision","consensusStatus"],transactionsStatusNumberToName)||nestedReceiptText(receipt,["statusName","status","decision","consensusStatus"])).toUpperCase();
+  // Studionet exposes three independent dimensions. `statusName` is protocol
+  // finality, `resultName` is consensus, and `txExecutionResultName` is GenVM
+  // execution. Do not use a generic `name` or treat consensus ACCEPTED as
+  // protocol FINALIZED.
+  const statusNames=receiptNames(receipt,["statusName","status","protocolStatus","finalityStatus","txStatus"],transactionsStatusNumberToName);
+  const consensusNames=receiptNames(receipt,["resultName","result","consensusResult","consensus_result"],transactionResultNumberToName);
+  const executionNames=receiptNames(receipt,["txExecutionResultName","txExecutionResult","executionResultName","execution_result","executionResult"],executionResultNumberToName);
+  const statusName=statusNames[0]??"";
+  const consensusName=consensusNames[0]??"";
+  const resultName=executionNames[0]??"";
   const successful=(client as unknown as {isSuccessful?: (receipt:unknown)=>boolean}).isSuccessful;
 
-  if(statusName.includes("UNDETERMINED")||resultName.includes("UNDETERMINED")) return {stage:"CONSENSUS_UNDETERMINED",hash,error:"Validators could not reach majority. This transaction was not executed."};
-  if(statusName!=="FINALIZED") return {stage:"CONSENSUS_FAILURE",hash,error:`Transaction did not finalize: ${statusName||"unknown status"}`};
+  if(statusName.includes("UNDETERMINED")||consensusName.includes("UNDETERMINED")||consensusName.includes("NO_MAJORITY")) return {stage:"CONSENSUS_UNDETERMINED",hash,error:"Validators could not reach majority. This transaction was not executed."};
+  if(statusName!=="FINALIZED") {
+    if(statusName==="ACCEPTED"||consensusName==="ACCEPTED"||consensusName==="MAJORITY_AGREE"||consensusName==="AGREE") return {stage:"CONSENSUS",hash,error:"Consensus accepted; awaiting protocol finality."};
+    return {stage:"CONSENSUS_FAILURE",hash,error:`Transaction did not finalize: ${statusName||"unknown status"}`};
+  }
   if(successful&& !successful(receipt)) return {stage:"EXECUTION_ERROR",hash,error:"Authoritative SDK success check failed"};
   if(!successful&&!["SUCCESS","FINISHED_WITH_RETURN"].includes(resultName)) return {stage:"EXECUTION_ERROR",hash,error:resultName||"unknown execution result"};
 
