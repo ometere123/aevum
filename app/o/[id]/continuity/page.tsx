@@ -31,10 +31,10 @@ export default function Continuity() {
       const args = [BigInt(id)];
       const hash = await writeContractSafely(session.client, { address: env.coreAddress as `0x${string}`, functionName: "trigger_continuity_review", args, value: 0n });
       const actionKey = `core:${id}:trigger_review`;
-      rememberSubmittedTransaction({ actionKey, account: session.address, chainId: "0xf22f", contract: env.coreAddress, method: "trigger_continuity_review", args, hash });
+      rememberSubmittedTransaction({ actionKey, account: session.address, chainId: "0xf22f", contract: env.coreAddress, method: "trigger_continuity_review", args, hash, organizationId: id, route: `/o/${id}/continuity` });
       setState(`CONSENSUS ${hash}`);
       const final = await confirmWrite(session.client, hash, reread);
-      updateStoredTransaction(actionKey, session.address, final.stage);
+      updateStoredTransaction(actionKey, session.address, final.stage, final.error);
     setState(final.hash ? `${final.stage} ${final.hash}` : final.stage);
     } catch (e) { const classified=classifyWalletError(e); setState(`${classified.stage}: ${classified.error??"write failed"}`); }
     finally { setBusy(false); }

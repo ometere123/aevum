@@ -59,8 +59,11 @@ type WalletContext = {
 const WalletContext = createContext<WalletContext | undefined>(undefined);
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [address, setAddress] = useState<string|undefined>(() => typeof window === "undefined" ? undefined : localStorage.getItem(STORAGE_KEY) || undefined);
-  const [chainId, setChainId] = useState<string|undefined>(() => typeof window === "undefined" ? undefined : localStorage.getItem(CHAIN_STORAGE_KEY) || undefined);
+  // Keep the first render identical on server and client. Session restoration
+  // belongs in the mounted effect; reading localStorage in the initializer
+  // causes a hydration mismatch when a wallet was connected previously.
+  const [address, setAddress] = useState<string|undefined>();
+  const [chainId, setChainId] = useState<string|undefined>();
   const [chainOk, setChainOk] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string>();

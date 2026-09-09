@@ -26,7 +26,7 @@ export function SuccessorActions({ orgId, candidateId, candidate, active }: { or
       const args = [BigInt(orgId), BigInt(candidateId)];
       const tx = await writeContractSafely(session.client, { address: env.coreAddress as `0x${string}`, functionName: "withdraw_nomination", args, value: 0n });
       const actionKey = `core:${orgId}:withdraw:${candidateId}`;
-      rememberSubmittedTransaction({ actionKey, account: session.address, chainId: "0xf22f", contract: env.coreAddress, method: "withdraw_nomination", args, hash: tx });
+      rememberSubmittedTransaction({ actionKey, account: session.address, chainId: "0xf22f", contract: env.coreAddress, method: "withdraw_nomination", args, hash: tx, organizationId: orgId, route: `/o/${orgId}/successors` });
       setHash(tx); setState(`SUBMITTED ${tx}`);
       const final = await confirmWrite(session.client, tx, async () => {
         const org = await readOrganization(orgId);
@@ -34,7 +34,7 @@ export function SuccessorActions({ orgId, candidateId, candidate, active }: { or
         const updated = candidates.find((x: { candidate_id: number }) => Number(x.candidate_id) === candidateId);
         if (!updated || updated.active) throw new Error("STATE_MISMATCH: nomination is still active after finalized withdrawal");
       });
-      updateStoredTransaction(actionKey, session.address, final.stage);
+      updateStoredTransaction(actionKey, session.address, final.stage, final.error);
       setState(final.stage === "STATE_CONFIRMED" ? final.stage : `${final.stage}: ${final.error ?? "not confirmed"}`);
     } catch (error) {
       const classified = classifyWalletError(error);

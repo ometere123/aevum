@@ -58,7 +58,7 @@ export default function Create(){
         args,
         value:0n,
       });
-      const actionKey="core:create_organization";rememberSubmittedTransaction({actionKey,account:session.address,chainId:"0xf22f",contract:env.coreAddress,method:"create_organization",args,hash});
+      const actionKey="core:create_organization";rememberSubmittedTransaction({actionKey,account:session.address,chainId:"0xf22f",contract:env.coreAddress,method:"create_organization",args,hash,route:"/create"});
       submittedHash=hash;setTx(hash);setMessage(`SUBMITTED ${hash}`);
       let confirmedId="";
       const final=await confirmWrite(session.client,hash,async()=>{
@@ -69,7 +69,7 @@ export default function Create(){
         const canonical=await readOrganization(confirmedId);
         if(String(canonical.creator).toLowerCase()!==address.toLowerCase()||canonical.name!==parsed.data.name) throw new Error("STATE_MISMATCH: canonical organization does not match the submitted charter");
       });
-      updateStoredTransaction(actionKey,session.address,final.stage);if(final.stage==="STATE_CONFIRMED"){setCreatedId(confirmedId);setMessage(`STATE_CONFIRMED / organization ${confirmedId}`)}else setMessage(`${final.stage}: ${final.error??"transaction not confirmed"}`);
+      updateStoredTransaction(actionKey,session.address,final.stage,final.error);if(final.stage==="STATE_CONFIRMED"){setCreatedId(confirmedId);setMessage(`STATE_CONFIRMED / organization ${confirmedId}`)}else setMessage(`${final.stage}: ${final.error??"transaction not confirmed"}`);
     }catch(error){
       if(submittedHash){
         setTx(submittedHash);

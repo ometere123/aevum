@@ -16,6 +16,8 @@ export type StoredTransaction = {
   childHash?: string;
   childRecipient?: string;
   childValueWei?: string;
+  amountWei?: string;
+  amountGen?: string;
 };
 
 const KEY = "aevum:transactions";
@@ -35,8 +37,12 @@ export function rememberSubmittedTransaction(input: Omit<StoredTransaction, "arg
   return item;
 }
 
-export function updateStoredTransaction(actionKey: string, account: string, stage: string) {
-  write(read().map((item) => item.actionKey === actionKey && item.account.toLowerCase() === account.toLowerCase() ? { ...item, stage, finalResult: stage } : item));
+export function updateStoredTransaction(actionKey: string, account: string, stage: string, error?: string) {
+  write(read().map((item) => item.actionKey === actionKey && item.account.toLowerCase() === account.toLowerCase() ? { ...item, stage, finalResult: stage, ...(error ? { error } : {}) } : item));
+}
+
+export function updateStoredTransactionDetails(actionKey: string, account: string, details: Pick<StoredTransaction, "childHash" | "childRecipient" | "childValueWei"> & { error?: string }) {
+  write(read().map((item) => item.actionKey === actionKey && item.account.toLowerCase() === account.toLowerCase() ? { ...item, ...details } : item));
 }
 
 export function allStoredTransactions(): StoredTransaction[] { return read(); }
