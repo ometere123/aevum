@@ -46,4 +46,18 @@ describe("wallet session lifecycle", () => {
     await waitFor(() => expect(screen.getByTestId("address").textContent).toBe(accounts[0]));
     expect(window.ethereum).toBe(provider);
   });
+
+  it("keeps the same session across route-like rerenders and a provider remount", async () => {
+    const account = "0xca130000000000000000000000000000000000f661";
+    const request = vi.fn(async ({ method }: { method: string }) => method === "eth_accounts" || method === "eth_requestAccounts" ? [account] : method === "eth_chainId" ? "0xf22f" : []);
+    window.ethereum = { request } as EIP1193Provider;
+    const { rerender, unmount } = render(createElement(WalletProvider, null, createElement(Probe)));
+    fireEvent.click(screen.getByRole("button", { name: "connect" }));
+    await waitFor(() => expect(screen.getByTestId("address").textContent).toBe(account));
+    rerender(createElement(WalletProvider, null, createElement(Probe)));
+    await waitFor(() => expect(screen.getByTestId("address").textContent).toBe(account));
+    unmount();
+    render(createElement(WalletProvider, null, createElement(Probe)));
+    await waitFor(() => expect(screen.getByTestId("address").textContent).toBe(account));
+  });
 });

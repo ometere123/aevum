@@ -9,8 +9,13 @@ async function read(address:`0x${string}`,functionName:string,args:unknown[]=[])
   assertConfigured();
   return client.readContract({address,functionName,args,transactionHashVariant:"latest-final"} as never) as Promise<unknown>;
 }
-const json=(value:unknown)=>JSON.parse(String(value));
-const vaultJson=(value:unknown)=>JSON.parse(String(value), (key, item) => ["funded","released","recovered","balance","epoch_spent"].includes(key) && typeof item === "number" ? String(item) : item);
+function parseRead(value:unknown):unknown {
+  if (typeof value !== "string") return value;
+  try { return JSON.parse(value, (key, item) => ["funded","released","recovered","balance","epoch_spent"].includes(key) && typeof item === "number" ? String(item) : item); }
+  catch { return value; }
+}
+const json=(value:unknown)=>parseRead(value) as any;
+const vaultJson=(value:unknown)=>parseRead(value) as any;
 export async function readOrganization(id:string){return json(await read(core(),"get_organization",[BigInt(id)]));}
 export async function readOrganizationCount(){return Number(await read(core(),"get_organization_count"));}
 export async function readOrganizations(){

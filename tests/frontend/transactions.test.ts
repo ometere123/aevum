@@ -24,6 +24,14 @@ describe("finalized write confirmation",()=>{
     expect(result.stage).toBe("EXECUTION_CONFIRMED");
     expect(reread).toHaveBeenCalledOnce();
   });
+  it("accepts numeric and bigint Studionet receipt enums without serializing raw bigints",async()=>{
+    const reread=vi.fn().mockResolvedValue(undefined);
+    const receipt={status:7n,txExecutionResult:1n,leaderReceipt:{status:7n,txExecutionResult:1n,amount:90071992547409931234567890n}};
+    const result=await confirmWrite(client(receipt),hash,reread);
+    expect(result.stage).toBe("EXECUTION_CONFIRMED");
+    expect(result.hash).toBe(hash);
+    expect(reread).toHaveBeenCalledOnce();
+  });
   it("preserves a hash and distinguishes protocol undetermined",async()=>{
     const result=await confirmWrite(client({statusName:"UNDETERMINED",txExecutionResult:{name:"UNDETERMINED"}}),hash,vi.fn());
     expect(result.stage).toBe("CONSENSUS_UNDETERMINED");
@@ -39,7 +47,7 @@ describe("finalized write confirmation",()=>{
   });
   it("reports canonical reread transport failure instead of success",async()=>{
     const result=await confirmWrite(client({statusName:"FINALIZED",txExecutionResultName:"SUCCESS"}),hash,async()=>{throw new Error("readback unavailable")});
-    expect(result.stage).toBe("READBACK_ERROR");expect(result.hash).toBe(hash);
+    expect(result.stage).toBe("READBACK_ERROR");expect(result.hash).toBe(hash);expect(result.error).toContain("Outcome unknown");
   });
   it("preserves canonical state mismatches as their own failure class",async()=>{
     const result=await confirmWrite(client({statusName:"FINALIZED",txExecutionResultName:"SUCCESS"}),hash,async()=>{throw new Error("STATE_MISMATCH: balance changed by the wrong amount")});

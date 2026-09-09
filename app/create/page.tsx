@@ -34,6 +34,7 @@ export default function Create(){
     const candidate={...form,recoveryRecipient:form.recoveryRecipient||address||""};
     const parsed=charterSchema.safeParse(candidate);
     if(!parsed.success){setMessage(parsed.error.issues[0]?.message??"Check the charter");return}
+    let submittedHash: string | undefined;
     try{
       assertConfigured();
       if(!address) throw new Error("Connect a Studionet wallet to write the charter.");
@@ -58,7 +59,7 @@ export default function Create(){
         value:0n,
       });
       const actionKey="core:create_organization";rememberSubmittedTransaction({actionKey,account:session.address,chainId:"0xf22f",contract:env.coreAddress,method:"create_organization",args,hash});
-      setTx(hash);setMessage(`SUBMITTED ${hash}`);
+      submittedHash=hash;setTx(hash);setMessage(`SUBMITTED ${hash}`);
       let confirmedId="";
       const final=await confirmWrite(session.client,hash,async()=>{
         const after=await readOrganizations();
@@ -69,7 +70,14 @@ export default function Create(){
         if(String(canonical.creator).toLowerCase()!==address.toLowerCase()||canonical.name!==parsed.data.name) throw new Error("STATE_MISMATCH: canonical organization does not match the submitted charter");
       });
       updateStoredTransaction(actionKey,session.address,final.stage);if(final.stage==="EXECUTION_CONFIRMED"){setCreatedId(confirmedId);setMessage(`EXECUTION_CONFIRMED / organization ${confirmedId}`)}else setMessage(`${final.stage}: ${final.error??"transaction not confirmed"}`);
-    }catch(error){const state=classifyWalletError(error);setMessage(`${state.stage}: ${state.error??"write failed"}`)}finally{setBusy(false)}
+    }catch(error){
+      if(submittedHash){
+        setTx(submittedHash);
+        setMessage(`OUTCOME_UNKNOWN: transaction ${submittedHash} was submitted. Check canonical organization state before retrying.`);
+      } else {
+        const state=classifyWalletError(error);setMessage(`${state.stage}: ${state.error??"write failed"}`);
+      }
+    }finally{setBusy(false)}
   };
 
   const input="mt-2 w-full border-b border-[#E9E1CF44] bg-transparent py-3 outline-none";
