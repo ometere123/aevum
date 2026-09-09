@@ -28,7 +28,12 @@ export default function ReviewReceipt({ params }: { params: Promise<{ id: string
     if (organizationId) setOrganization(await readOrganization(organizationId));
     const records = allStoredTransactions().filter((item) => item.method === "trigger_continuity_review");
     const latest = records.sort((a, b) => b.submittedAt - a.submittedAt)[0];
-    if (latest) setHash(latest.hash);
+    if (latest) {
+      setHash(latest.hash);
+      if (/RETRYABLE_ERROR|LLM_MALFORMED|SOURCE_TRANSIENT|SOURCE_UNAVAILABLE|MODEL_TIMEOUT/i.test(`${next.review_state ?? ""} ${next.error_code ?? ""} ${next.outcome ?? ""}`) && latest.stage !== "RETRYABLE_ERROR") {
+        updateStoredTransaction(latest.actionKey, latest.account, "RETRYABLE_ERROR", String(next.error_code ?? "Retryable review failure"));
+      }
+    }
   };
 
   useEffect(() => { void params.then(({ id }) => { setReviewId(id); void load(id).catch((e) => setError(e instanceof Error ? e.message : "Core read failed")); }); }, [params]);
